@@ -138,12 +138,45 @@ table.grid { border-collapse: separate; border-spacing: 0; width: 100%; font-siz
 .grid input[type=text]:focus { border-color: var(--accent); background: var(--panel); outline: none; }
 .grid input.bad { border-color: var(--bad); background: var(--bad-soft); }
 .grid .f { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
-.grid .w-name { width: 128px; } .grid .w-freq { width: 104px; } .grid .w-tone { width: 78px; } .grid .w-sel { width: 76px; }
+.grid .w-name { width: 128px; min-width: 128px; } .grid .w-freq { width: 104px; min-width: 104px; } .grid .w-tone { width: 78px; min-width: 78px; } .grid .w-sel { width: 76px; }
 .grid td.c { text-align: center; }
 .shift { font: 12px var(--f-mono); color: var(--muted); padding: 0 6px; }
 .shift.split, .shift.rxonly { color: var(--warn); }
 .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; }
 .x:hover { color: var(--bad); background: var(--bad-soft); }
+.selcell { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; width: 100%; cursor: pointer; }
+.grid tr.sel td { background: var(--accent-soft); }
+.selinfo { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
+.acts { display: inline-flex; align-items: center; }
+.acts .x { padding: 4px 5px; }
+.grip { cursor: grab; color: var(--muted); padding: 4px; user-select: none; -webkit-user-select: none; }
+.grid tr.dragging td { opacity: .5; }
+.grid tr.drop-above td { box-shadow: inset 0 2px 0 var(--accent); }
+.grid tr.drop-below td { box-shadow: inset 0 -2px 0 var(--accent); }
+.bulkgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 8px 12px; align-items: center; }
+.bulkgrid label { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.bulkgrid select, .bulkgrid input[type=text] { border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 6px 8px; width: 100%; }
+.bulkgrid input.bad { border-color: var(--bad); background: var(--bad-soft); }
+
+/* preset picker */
+dialog.dlg { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100% - 32px)); max-height: calc(100vh - 48px); }
+dialog.dlg::backdrop { background: rgba(0, 0, 0, .45); }
+.dlg-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; max-height: calc(100vh - 50px); margin: 0; }
+.dlg-body > p { margin: 0; padding: 10px 16px 0; font-size: 13px; }
+.dlg-head, .dlg-foot { display: flex; gap: 8px; align-items: center; padding: 12px 16px; }
+.dlg-head { border-bottom: 1px solid var(--line); }
+.dlg-head h3 { font-size: 22px; flex: 1; }
+.dlg-foot { border-top: 1px solid var(--line); flex-wrap: wrap; }
+.presetlist { overflow: auto; padding: 12px 16px; display: grid; gap: 12px; }
+.presetlist legend label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.presetlist .pnote { margin: 0; font-size: 12px; color: var(--muted); }
+.ptab { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ptab td { padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ptab td:first-child { width: 28px; }
+.ptab td.occ { color: var(--warn); white-space: normal; }
+.tag { font: 600 11px var(--f-body); padding: 1px 8px; border-radius: 9px; border: 1px solid var(--line); margin-left: 6px; }
+.tag.tx { color: var(--ok); }
+.tag.rx { color: var(--warn); background: var(--warn-soft); }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 14px; margin: 0; display: grid; gap: 8px; min-width: 0; }
@@ -241,6 +274,10 @@ footer p { margin: 0; max-width: 90ch; }
       <div class="toolbar">
         <label><input type="checkbox" id="showEmpty"> Show empty slots</label>
         <input type="search" id="search" placeholder="Find name or MHz" aria-label="Find channel">
+        <button class="btn small" id="btnPresets" type="button">Add presets</button>
+        <button class="btn small" id="btnUndo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
+        <button class="btn small" id="btnRedo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
+        <span class="selinfo" id="selInfo" hidden><span id="selCount"></span><button class="btn small" id="btnBulkEdit" type="button">Edit…</button><button class="btn small" id="btnBulkDel" type="button">Delete</button><button class="link" id="btnSelNone" type="button">Clear selection</button></span>
         <div class="spacer"></div>
         <div class="pages" id="pages" aria-label="Channel range"></div>
       </div>
@@ -250,7 +287,7 @@ footer p { margin: 0; max-width: 90ch; }
           <tbody id="gridBody"></tbody>
         </table>
       </div>
-      <p class="muted" style="margin:0;font-size:12px">TX accepts an absolute frequency, a shift such as <span class="mono">+0.6</span> or <span class="mono">-5</span>, or <span class="mono">off</span> for receive-only. Tones take <span class="mono">100.0</span>, <span class="mono">D023N</span> or <span class="mono">D023I</span>; leave blank for none. Type a frequency into an empty slot to create a channel.</p>
+      <p class="muted" style="margin:0;font-size:12px">TX accepts an absolute frequency, a shift such as <span class="mono">+0.6</span> or <span class="mono">-5</span>, or <span class="mono">off</span> for receive-only. Tones take <span class="mono">100.0</span>, <span class="mono">D023N</span> or <span class="mono">D023I</span>; leave blank for none. Type a frequency into an empty slot to create a channel. Tick rows to edit or delete several at once (shift-click picks a range). Drag <span aria-hidden="true">⠿</span> or use ▲ ▼ to move a channel, and ⧉ to copy it to the next empty slot.</p>
     </div>
 
     <div class="pane" data-pane="settings" hidden><div class="cards" id="settingsCards"></div></div>
@@ -278,6 +315,22 @@ footer p { margin: 0; max-width: 90ch; }
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <datalist id="tones"></datalist>
+<dialog class="dlg" id="presetDlg" aria-labelledby="presetTitle">
+  <form method="dialog" class="dlg-body">
+    <div class="dlg-head"><h3 id="presetTitle">Add preset channels</h3><button class="x" value="cancel" aria-label="Close">✕</button></div>
+    <p class="muted">Each preset has its own fixed channel number. Tick the ones you want; unticked slots stay as they are.</p>
+    <div class="presetlist" id="presetList"></div>
+    <div class="dlg-foot"><span class="muted" id="presetSummary"></span><span class="spacer"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnPresetApply" type="button">Add channels</button></div>
+  </form>
+</dialog>
+<dialog class="dlg" id="bulkDlg" aria-labelledby="bulkTitle">
+  <form method="dialog" class="dlg-body">
+    <div class="dlg-head"><h3 id="bulkTitle">Edit selected channels</h3><button class="x" value="cancel" aria-label="Close">✕</button></div>
+    <p class="muted" id="bulkIntro"></p>
+    <div class="presetlist"><div class="bulkgrid" id="bulkFields"></div></div>
+    <div class="dlg-foot"><span class="muted" id="bulkSummary"></span><span class="spacer"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnBulkApply" type="button">Apply</button></div>
+  </form>
+</dialog>
 
 <script>
 // ===== Radio engine: profile-driven codecs + clone protocols (ported from CHIRP) =====
@@ -823,14 +876,36 @@ const state = {
   profile: byId(store.get('fengprog.model')) || byId('uv5rmini'),
   img: null, imgProfile: null, source: 'none', fileName: '', fromRadio: false, backup: null,
   dirtyCh: new Set(), dirtyOther: new Set(), edited: false, transport: null, busy: false,
-  page: 0, showEmpty: false, query: '', radioId: '',
+  page: 0, showEmpty: false, query: '', radioId: '', selected: new Set(),
 };
 function loadSample() {
   const p = state.profile, s = sampleFor(p);
   state.dirtyCh.clear(); state.dirtyOther.clear(); state.edited = false; state.fromRadio = false; state.radioId = '';
   if (s) { state.img = R.fitImage(p, b64ToBytes(s)); state.imgProfile = p.id; state.source = 'sample'; }
   else { state.img = null; state.imgProfile = null; state.source = 'none'; }
-  state.page = 0;
+  state.page = 0; imageReplaced();
+}
+
+// ---------- undo / redo ----------
+// Whole-image snapshots: images are a few KB, and this covers channels, settings and VFOs alike.
+const edits = { undo: [], redo: [] };
+const HISTORY_MAX = 50;
+function snapshot() { return { img: state.img.slice(), dirtyCh: new Set(state.dirtyCh), dirtyOther: new Set(state.dirtyOther), edited: state.edited }; }
+function pushUndo(snap) {
+  edits.undo.push(snap); if (edits.undo.length > HISTORY_MAX) edits.undo.shift();
+  edits.redo.length = 0; updateHistoryButtons();
+}
+function imageReplaced() { edits.undo.length = 0; edits.redo.length = 0; state.selected.clear(); }
+function stepHistory(back) {
+  const from = back ? edits.undo : edits.redo, to = back ? edits.redo : edits.undo;
+  if (!from.length || state.busy || !state.img) return;
+  const s = from.pop(); to.push(snapshot());
+  state.img.set(s.img); state.dirtyCh = s.dirtyCh; state.dirtyOther = s.dirtyOther; state.edited = s.edited;
+  renderAll(); toast(back ? 'Undone' : 'Redone');
+}
+function updateHistoryButtons() {
+  $('btnUndo').disabled = !edits.undo.length || state.busy;
+  $('btnRedo').disabled = !edits.redo.length || state.busy;
 }
 
 // ---------- ui helpers ----------
@@ -971,7 +1046,7 @@ async function runClone(dir) {
       state.radioId = info.model || '';
       const clash = knownIdConflict(p, state.radioId);
       state.img = data; state.imgProfile = p.id; state.backup = data.slice(); state.source = 'radio'; state.fromRadio = !clash;
-      state.dirtyCh.clear(); state.dirtyOther.clear(); state.edited = false;
+      state.dirtyCh.clear(); state.dirtyOther.clear(); state.edited = false; imageReplaced();
       store.set('fengprog.backup.' + p.id, JSON.stringify({ when: new Date().toISOString(), id: state.radioId, b64: bytesToB64(data) }));
       log(`Read complete in ${((performance.now() - t0) / 1000).toFixed(1)} s`, 'o');
       renderAll();
@@ -1021,6 +1096,7 @@ function updateChrome() {
   $('model').disabled = busy;
   $('btnOpen').disabled = busy;
   $('btnSave').disabled = !has; $('btnCsv').disabled = !has;
+  $('btnPresets').disabled = !has || busy; updateHistoryButtons();
   $('btnRead').disabled = !t || busy;
   const imgOk = has && state.imgProfile === p.id && state.source !== 'none';
   $('btnWrite').disabled = !t || busy || !imgOk;
@@ -1060,7 +1136,7 @@ const EXTRA_HEAD = { bcl: ['BCL', 'Busy channel lockout'], pttid: ['PTT ID', 'Wh
 function buildGridHead() {
   const p = state.profile;
   const ex = p.extras.map(e => { const [h, t] = EXTRA_HEAD[e.key] || [e.label, '']; return `<th title="${esc(t)}">${esc(h)}</th>`; }).join('');
-  $('gridHead').innerHTML = `<tr><th>CH</th><th>Name</th><th>RX MHz</th><th>TX MHz</th><th>Shift</th><th title="Decode: CTCSS Hz or DCS like D023N">RX tone</th><th title="Encode: CTCSS Hz or DCS like D023N">TX tone</th><th>Power</th><th>Mode</th><th title="Include in scan">Scan</th>${ex}<th></th></tr>`;
+  $('gridHead').innerHTML = `<tr><th><label class="selcell"><input type="checkbox" id="selAll" aria-label="Select all shown channels">CH</label></th><th>Name</th><th>RX MHz</th><th>TX MHz</th><th>Shift</th><th title="Decode: CTCSS Hz or DCS like D023N">RX tone</th><th title="Encode: CTCSS Hz or DCS like D023N">TX tone</th><th>Power</th><th>Mode</th><th title="Include in scan">Scan</th>${ex}<th></th></tr>`;
   $('tones').innerHTML = [...R.CTCSS.map(v => v.toFixed(1)), ...p.dcs.map(v => 'D' + String(v).padStart(3, '0') + 'N'), ...p.dcs.map(v => 'D' + String(v).padStart(3, '0') + 'I')].map(o => `<option value="${o}">`).join('');
 }
 function shiftInfo(c) {
@@ -1108,8 +1184,9 @@ function rowHtml(c) {
     return `<td>${sel(x.labels, v, `data-x="${x.key}" aria-label="${esc(x.label)}"`)}</td>`;
   }).join('');
   const modeOpts = p.modes.filter(m => m !== 'AM');
-  return `<tr data-n="${c.n}" class="${e ? 'empty' : ''}${state.dirtyCh.has(c.n) ? ' dirty' : ''}">
-    <td>${c.n}</td>
+  const picked = state.selected.has(c.n);
+  return `<tr data-n="${c.n}" class="${e ? 'empty' : ''}${state.dirtyCh.has(c.n) ? ' dirty' : ''}${picked ? ' sel' : ''}">
+    <td><label class="selcell"><input type="checkbox" data-sel ${picked ? 'checked' : ''} aria-label="Select channel ${c.n}">${c.n}</label></td>
     <td><input type="text" class="w-name" data-k="name" maxlength="${p.nameLen}" value="${e ? '' : esc(c.name)}" aria-label="Name"></td>
     <td class="rxcell"><input type="text" class="w-freq f" data-k="rx" value="${e ? '' : fmtMHz(c.rx)}" placeholder="${e ? '—' : ''}" aria-label="RX frequency"${locked('rx')}></td>
     <td><input type="text" class="w-freq f" data-k="tx" value="${e ? '' : c.tx == null ? 'off' : fmtMHz(c.tx)}" aria-label="TX frequency"${locked('tx')}></td>
@@ -1120,7 +1197,7 @@ function rowHtml(c) {
     <td>${isAM ? '<span class="shift">AM</span>' : sel(modeOpts, e ? 0 : Math.max(0, modeOpts.indexOf(c.mode)), `data-k="mode" aria-label="Mode"${locked('mode')}`)}</td>
     <td class="c"><input type="checkbox" data-k="scan" ${e || c.scan ? 'checked' : ''} aria-label="Scan"></td>
     ${ex}
-    <td>${e || locks.length ? '' : `<button class="x" data-act="clear" title="Clear channel ${c.n}" aria-label="Clear channel ${c.n}">✕</button>`}</td>
+    <td>${e || locks.length ? '' : `<span class="acts"><span class="grip" draggable="true" title="Drag to move" aria-hidden="true">⠿</span><button class="x" data-act="up" title="Move up" aria-label="Move channel ${c.n} up">▲</button><button class="x" data-act="down" title="Move down" aria-label="Move channel ${c.n} down">▼</button><button class="x" data-act="dup" title="Copy to the next empty channel" aria-label="Copy channel ${c.n} to the next empty channel">⧉</button><button class="x" data-act="clear" title="Clear channel ${c.n}" aria-label="Clear channel ${c.n}">✕</button></span>`}</td>
   </tr>`;
 }
 function renderGrid() {
@@ -1129,6 +1206,31 @@ function renderGrid() {
   const list = visibleChannels();
   $('gridBody').innerHTML = list.length ? list.map(rowHtml).join('')
     : `<tr><td></td><td colspan="${cols - 1}" class="emptystate">${state.query ? 'No channel matches that search.' : 'No channels in this range. Tick “Show empty slots” to add one.'}</td></tr>`;
+  syncSelection();
+}
+
+// ---------- row selection ----------
+let lastPicked = null;
+function shownNumbers() { return [...$('gridBody').querySelectorAll('tr[data-n]')].map(tr => +tr.dataset.n); }
+function syncSelection() {
+  const shown = shownNumbers(), on = shown.filter(n => state.selected.has(n)).length, all = $('selAll');
+  if (all) { all.checked = shown.length > 0 && on === shown.length; all.indeterminate = on > 0 && on < shown.length; }
+  const k = state.selected.size;
+  $('selInfo').hidden = !k; $('selCount').textContent = `${k} selected`;
+}
+function setPicked(ns, on) {
+  for (const n of ns) {
+    if (on) state.selected.add(n); else state.selected.delete(n);
+    const tr = $('gridBody').querySelector(`tr[data-n="${n}"]`);
+    if (tr) { tr.classList.toggle('sel', on); tr.querySelector('[data-sel]').checked = on; }
+  }
+  syncSelection();
+}
+function onPick(box, shift) {
+  const n = +box.closest('tr').dataset.n, on = box.checked, shown = shownNumbers();
+  const i = shown.indexOf(n), j = shift && lastPicked != null ? shown.indexOf(lastPicked) : -1;
+  setPicked(j >= 0 ? shown.slice(Math.min(i, j), Math.max(i, j) + 1) : [n], on);
+  lastPicked = n;
 }
 function newChannel(n, rx) {
   const p = state.profile, extra = {};
@@ -1176,16 +1278,246 @@ function onGridChange(ev) {
         case 'scan': c.scan = v; break;
       }
     }
-    commitChannel(c, before);
+    const snap = snapshot();
+    commitChannel(c, before); pushUndo(snap);
     const tmp = document.createElement('tbody'); tmp.innerHTML = rowHtml(R.decodeChannel(p, state.img, n)); tr.replaceWith(tmp.firstElementChild);
     renderPages(); updateChrome();
   } catch (e) { inp.classList.add('bad'); inp.title = e.message; toast(e.message); }
 }
+// ---------- move, copy and bulk actions ----------
+// Moves copy raw slot bytes, so nothing the decoder doesn't model is lost on the way.
+function slotSpans(p, n) { const o = R.chanOff(p, n); return p.family === 'uv5r' ? [[o, 16], [R.nameOff(p, n), 16]] : [[o, 32]]; }
+function readSlot(n) { return slotSpans(state.profile, n).map(([o, len]) => state.img.slice(o, o + len)); }
+function writeSlot(n, parts) { slotSpans(state.profile, n).forEach(([o], i) => state.img.set(parts[i], o)); state.dirtyCh.add(n); state.edited = true; }
+const isEmpty = n => state.img[R.chanOff(state.profile, n)] === 0xFF;
+const isFixed = n => lockFor(n).length > 0;
+// Moves the content of slots[from] to slots[to]; everything in between shifts one place toward `from`.
+function rotate(slots, from, to) {
+  const span = slots.slice(Math.min(from, to), Math.max(from, to) + 1);
+  const fixed = span.find(isFixed); if (fixed != null) throw new Error(`Channel ${fixed} is a fixed GMRS channel and can't be moved`);
+  const turn = a => from < to ? [...a.slice(1), a[0]] : [a[a.length - 1], ...a.slice(0, -1)];
+  const data = turn(span.map(readSlot)), picked = turn(span.map(n => state.selected.has(n)));
+  span.forEach((n, i) => { writeSlot(n, data[i]); if (picked[i]) state.selected.add(n); else state.selected.delete(n); });
+}
+function doMove(slots, from, to) {
+  if (from === to || from < 0 || to < 0) return;
+  const snap = snapshot();
+  try { rotate(slots, from, to); } catch (e) { toast(e.message); return; }
+  pushUndo(snap); lastPicked = null;
+  const dest = slots[to], p = state.profile;
+  if (!state.query) state.page = Math.floor((dest - p.channels[0]) / PAGE);
+  renderGrid(); renderPages(); updateChrome();
+  return dest;
+}
+function moveBy(n, dir, act) {
+  const p = state.profile, shown = shownNumbers(), j = shown.indexOf(n) + dir;
+  const other = j >= 0 && j < shown.length ? shown[j] : n + dir;
+  if (other < p.channels[0] || other > p.channels[1]) { toast(`Channel ${n} is already at the ${dir < 0 ? 'top' : 'bottom'}`); return; }
+  const dest = doMove([Math.min(n, other), Math.max(n, other)], dir < 0 ? 1 : 0, dir < 0 ? 0 : 1);
+  if (dest != null) $('gridBody').querySelector(`tr[data-n="${dest}"] [data-act="${act}"]`)?.focus();
+}
+function duplicate(n) {
+  const p = state.profile; let t = n + 1;
+  while (t <= p.channels[1] && (!isEmpty(t) || isFixed(t))) t++;
+  if (t > p.channels[1]) { toast(`No empty channel after ${n} to copy into`); return; }
+  const snap = snapshot(); writeSlot(t, readSlot(n)); pushUndo(snap);
+  renderGrid(); renderPages(); updateChrome(); toast(`Copied channel ${n} to ${t}`);
+}
+function bulkDelete() {
+  const all = [...state.selected].filter(n => !isEmpty(n)), ns = all.filter(n => !isFixed(n)), kept = all.length - ns.length;
+  if (!ns.length) { toast(kept ? 'Fixed GMRS channels can\'t be deleted' : 'The selected rows are already empty'); return; }
+  const snap = snapshot();
+  for (const n of ns) R.encodeChannel(state.profile, state.img, { n, empty: true });
+  ns.forEach(n => state.dirtyCh.add(n)); state.edited = true; pushUndo(snap);
+  state.selected.clear(); renderGrid(); renderPages(); updateChrome();
+  toast(`Deleted ${ns.length} channel${ns.length === 1 ? '' : 's'}${kept ? `, kept ${kept} fixed GMRS` : ''}. Undo brings them back.`);
+}
+function bulkFieldDefs(p) {
+  return [
+    { key: 'power', label: 'Power', opts: p.power.map((x, i) => powerLabel(p, i)) },
+    { key: 'mode', label: 'Mode', opts: p.modes.filter(m => m !== 'AM') },
+    { key: 'rxTone', label: 'RX tone', tone: true },
+    { key: 'txTone', label: 'TX tone', tone: true },
+    { key: 'scan', label: 'Scan', opts: ['Off', 'On'] },
+    ...p.extras.map(x => ({ key: x.key, extra: true, label: (EXTRA_HEAD[x.key] || [x.label])[1] || x.label, opts: x.labels })),
+  ];
+}
+function openBulkEdit() {
+  const ns = [...state.selected].filter(n => !isEmpty(n));
+  if (!ns.length) { toast('Select at least one channel that isn\'t empty'); return; }
+  const defs = bulkFieldDefs(state.profile);
+  $('bulkIntro').textContent = `Tick each field to change on the ${ns.length} selected channel${ns.length === 1 ? '' : 's'}. Fields you leave unticked keep their current values.`;
+  $('bulkFields').innerHTML = defs.map(d => {
+    const ctl = d.tone ? `<input type="text" class="mono" list="tones" data-bf="${d.key}" placeholder="None" aria-label="${esc(d.label)}">`
+      : `<select data-bf="${d.key}" aria-label="${esc(d.label)}">${d.opts.map((o, i) => `<option value="${i}">${esc(o)}</option>`).join('')}</select>`;
+    return `<label><input type="checkbox" data-on="${d.key}">${esc(d.label)}</label>${ctl}`;
+  }).join('');
+  updateBulkSummary(); $('bulkDlg').showModal();
+}
+function updateBulkSummary() {
+  const k = $('bulkFields').querySelectorAll('[data-on]:checked').length;
+  $('bulkSummary').textContent = k ? `${k} field${k === 1 ? '' : 's'} to change` : 'Nothing ticked';
+  $('btnBulkApply').disabled = !k;
+}
+function onBulkInput(ev) {
+  const key = ev.target.dataset.bf;
+  if (key) { $('bulkFields').querySelector(`[data-on="${key}"]`).checked = true; ev.target.classList.remove('bad'); }
+  updateBulkSummary();
+}
+function applyBulkEdit() {
+  const p = state.profile, defs = bulkFieldDefs(p), modes = p.modes.filter(m => m !== 'AM'), F = $('bulkFields');
+  const vals = {};
+  for (const d of defs) {
+    if (!F.querySelector(`[data-on="${d.key}"]`).checked) continue;
+    const ctl = F.querySelector(`[data-bf="${d.key}"]`);
+    if (d.tone) { try { vals[d.key] = R.parseTone(ctl.value, p.dcs); } catch (e) { ctl.classList.add('bad'); toast(e.message); return; } }
+    else vals[d.key] = +ctl.value;
+  }
+  const ns = [...state.selected].filter(n => !isEmpty(n)).sort((a, b) => a - b), snap = snapshot(), failed = []; let ok = 0;
+  for (const n of ns) {
+    const before = R.decodeChannel(p, state.img, n), c = JSON.parse(JSON.stringify(before));
+    for (const d of defs) {
+      if (!(d.key in vals)) continue; const v = vals[d.key];
+      if (d.extra) c.extra[d.key] = v;
+      else if (d.key === 'mode') { if (c.mode !== 'AM') c.mode = modes[v]; }
+      else c[d.key] = v;
+    }
+    try { commitChannel(c, before); ok++; } catch (e) { failed.push(`${n} (${e.message})`); }
+  }
+  if (ok) pushUndo(snap);
+  if (failed.length) log('Bulk edit skipped: ' + failed.join('; '), 'e');
+  $('bulkDlg').close(); renderGrid(); renderPages(); updateChrome();
+  toast(`Updated ${ok} channel${ok === 1 ? '' : 's'}${failed.length ? `, skipped ${failed.length} (see Log)` : ''}`);
+}
+
+// ---------- drag to move ----------
+let dragFrom = null;
+function clearDropMarks() { $('gridBody').querySelectorAll('.drop-above, .drop-below, .dragging').forEach(tr => tr.classList.remove('drop-above', 'drop-below', 'dragging')); }
+function onDragStart(e) {
+  const g = e.target.closest?.('.grip'); if (!g) return;
+  const tr = g.closest('tr'); dragFrom = +tr.dataset.n;
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(dragFrom));
+  e.dataTransfer.setDragImage(tr, 20, 16); tr.classList.add('dragging');
+}
+function onDragOver(e) {
+  if (dragFrom == null) return;
+  const tr = e.target.closest?.('tr[data-n]'); if (!tr) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  const shown = shownNumbers(), from = shown.indexOf(dragFrom), to = shown.indexOf(+tr.dataset.n);
+  $('gridBody').querySelectorAll('.drop-above, .drop-below').forEach(x => x.classList.remove('drop-above', 'drop-below'));
+  if (to !== from) tr.classList.add(to < from ? 'drop-above' : 'drop-below');
+}
+function onDrop(e) {
+  if (dragFrom == null) return;
+  const tr = e.target.closest?.('tr[data-n]'); e.preventDefault();
+  const a = dragFrom; dragFrom = null; clearDropMarks(); if (!tr) return;
+  const shown = shownNumbers(), dest = doMove(shown, shown.indexOf(a), shown.indexOf(+tr.dataset.n));
+  if (dest != null) toast(`Moved channel ${a} to ${dest}`);
+}
+
 function onGridClick(ev) {
-  const b = ev.target.closest('[data-act="clear"]'); if (!b) return;
-  const n = +b.closest('tr').dataset.n;
+  if (ev.target.matches('[data-sel]')) { onPick(ev.target, ev.shiftKey); return; }
+  const b = ev.target.closest('[data-act]'); if (!b) return;
+  const n = +b.closest('tr').dataset.n, act = b.dataset.act;
+  if (act === 'up' || act === 'down') { moveBy(n, act === 'up' ? -1 : 1, act); return; }
+  if (act === 'dup') { duplicate(n); return; }
+  pushUndo(snapshot());
   R.encodeChannel(state.profile, state.img, { n, empty: true }); state.dirtyCh.add(n); state.edited = true;
   renderGrid(); renderPages(); updateChrome(); toast(`Channel ${n} cleared`);
+}
+
+// ---------- preset channels ----------
+// start: first channel for [999/1000-channel radios, 128-channel radios]; null = pack not offered there.
+// Items: [name, RX MHz, options]. Options: tx (TX MHz), mode, low (lowest power), rxOnly.
+const PRESET_PACKS = [
+  { id: 'ham', label: 'Ham VHF/UHF simplex', use: 'tx', start: [57, 56], mode: 'FM',
+    note: 'Amateur license required to transmit. 146.520 and 446.000 are the national simplex calling frequencies.',
+    items: [['2M CALL', 146.52], ['2M 400', 146.4], ['2M 420', 146.42], ['2M 440', 146.44], ['2M 460', 146.46], ['2M 480', 146.48],
+      ['2M 500', 146.5], ['2M 540', 146.54], ['2M 560', 146.56], ['2M 580', 146.58],
+      ['70 CALL', 446], ['70 025', 446.025], ['70 050', 446.05], ['70 075', 446.075], ['70 100', 446.1], ['70 125', 446.125], ['70 150', 446.15], ['70 175', 446.175]] },
+  { id: 'gmrs', label: 'GMRS / FRS', use: 'tx', start: [200, 76], mode: 'FM', low: true, gmrs: true,
+    note: 'Set to low power, which suits FRS. A GMRS license allows more power on 1–7, 15–22 and the repeater channels. Channels 8–14 are FRS-only, narrow FM at low power. Repeater channels (R) transmit 5 MHz up and need the repeater\'s tone.',
+    items: [
+      ...[462.5625, 462.5875, 462.6125, 462.6375, 462.6625, 462.6875, 462.7125].map((f, i) => [`GMRS${i + 1}`, f]),
+      ...[467.5625, 467.5875, 467.6125, 467.6375, 467.6625, 467.6875, 467.7125].map((f, i) => [`FRS${i + 8}`, f, { mode: 'NFM' }]),
+      ...[462.55, 462.575, 462.6, 462.625, 462.65, 462.675, 462.7, 462.725].map((f, i) => [`GMRS${i + 15}`, f]),
+      ...[462.55, 462.575, 462.6, 462.625, 462.65, 462.675, 462.7, 462.725].map((f, i) => [`GMRS${i + 15}R`, f, { tx: f + 5 }])] },
+  { id: 'murs', label: 'MURS', use: 'tx', start: [230, 106], mode: 'NFM', low: true,
+    note: 'License-free, 2 W maximum, so these are set to low power.',
+    items: [['MURS1', 151.82], ['MURS2', 151.88], ['MURS3', 151.94], ['MURS4', 154.57], ['MURS5', 154.6]] },
+  { id: 'noaa', label: 'NOAA weather', use: 'rx', start: [235, 111], mode: 'FM', rxOnly: true,
+    note: 'Receive only. Many of these radios also have a built-in NOAA mode on a side key.',
+    items: [['WX1', 162.55], ['WX2', 162.4], ['WX3', 162.475], ['WX4', 162.425], ['WX5', 162.45], ['WX6', 162.5], ['WX7', 162.525]] },
+  { id: 'marine', label: 'Marine VHF', use: 'rx', start: [242, 118], mode: 'FM', rxOnly: true,
+    note: 'Receive only. Transmitting here needs a type-accepted marine radio.',
+    items: [['MAR16', 156.8], ['MAR9', 156.45], ['MAR13', 156.65], ['MAR22A', 157.1], ['MAR6', 156.3],
+      ['MAR68', 156.425], ['MAR69', 156.475], ['MAR71', 156.575], ['MAR72', 156.625], ['MAR78A', 156.925]] },
+  { id: 'interop', label: 'Public-safety interoperability', use: 'rx', start: [252, null], mode: 'NFM', rxOnly: true,
+    note: 'Receive only. National mutual-aid channels used when agencies work an incident together.',
+    items: [['VCALL10', 155.7525], ['VTAC11', 151.1375], ['VTAC12', 154.4525], ['VTAC13', 158.7375], ['VTAC14', 159.4725],
+      ['VLAW31', 155.475], ['UCALL40', 453.2125], ['UTAC41', 453.4625], ['UTAC42', 453.7125], ['UTAC43', 453.8625]] },
+];
+function presetsFor(p) {
+  const fam = p.channels[1] - p.channels[0] + 1 <= 128 ? 1 : 0;
+  const lowest = p.power.reduce((b, x, i) => x.watts < p.power[b].watts ? i : b, 0);
+  return PRESET_PACKS.filter(pk => pk.start[fam] != null && !(pk.gmrs && p.locks?.length)).map(pk => ({
+    ...pk, items: pk.items.map(([name, mhz, o = {}], i) => {
+      const rx = Math.round(mhz * 1e5) * 10, mode = o.mode || pk.mode;
+      return { key: `${pk.id}:${i}`, n: pk.start[fam] + i, name, rx,
+        tx: pk.rxOnly ? null : o.tx ? Math.round(o.tx * 1e5) * 10 : rx, mode, power: pk.low ? lowest : 0 };
+    }).filter(it => it.n <= p.channels[1] && R.inBands(it.rx, p.bands)),
+  })).filter(pk => pk.items.length);
+}
+function presetChannel(p, it) {
+  const c = newChannel(it.n, it.rx);
+  c.name = [...(p.family === 'uv5r' ? it.name.toUpperCase() : it.name)].filter(ch => p.nameChars.includes(ch) || ch === ' ').join('').slice(0, p.nameLen);
+  c.tx = it.tx; c.power = it.power; c.mode = p.modes.includes(it.mode) ? it.mode : c.mode;
+  return c;
+}
+function openPresets() {
+  const p = state.profile, packs = presetsFor(p), list = $('presetList'); list.innerHTML = '';
+  if (p.locks?.length) list.insertAdjacentHTML('beforeend', `<p class="pnote">The ${esc(p.label)} already has GMRS/FRS fixed on channels ${p.locks[0].from}–${p.locks[0].to}, so that pack isn't offered.</p>`);
+  for (const pk of packs) {
+    const rows = pk.items.map(it => {
+      const cur = R.decodeChannel(p, state.img, it.n);
+      const txt = it.tx == null ? 'RX only' : it.tx === it.rx ? 'Simplex' : `TX ${fmtMHz(it.tx)}`;
+      const occ = cur.empty ? '' : `Replaces ${cur.name ? `“${esc(cur.name)}”` : fmtMHz(cur.rx)}`;
+      return `<tr><td><input type="checkbox" data-pi="${it.key}" data-occ="${occ ? 1 : 0}" aria-label="${esc(it.name)}"></td><td class="mono">${it.n}</td><td>${esc(it.name)}</td><td class="mono">${fmtMHz(it.rx)}</td><td>${txt}</td><td class="occ">${occ}</td></tr>`;
+    }).join('');
+    list.insertAdjacentHTML('beforeend', `<fieldset data-pack="${pk.id}"><legend><label><input type="checkbox" data-pack-all="${pk.id}">${esc(pk.label)}</label><span class="tag ${pk.use}">${pk.use === 'tx' ? 'Transmit' : 'Receive only'}</span></legend><p class="pnote">Channels ${pk.items[0].n}–${pk.items[pk.items.length - 1].n}. ${esc(pk.note)}</p><table class="ptab"><tbody>${rows}</tbody></table></fieldset>`);
+  }
+  updatePresetSummary(); $('presetDlg').showModal();
+}
+function updatePresetSummary() {
+  const boxes = [...$('presetList').querySelectorAll('[data-pi]')], on = boxes.filter(b => b.checked), occ = on.filter(b => b.dataset.occ === '1').length;
+  $('presetList').querySelectorAll('[data-pack-all]').forEach(all => {
+    const mine = [...all.closest('fieldset').querySelectorAll('[data-pi]')], k = mine.filter(b => b.checked).length;
+    all.checked = k === mine.length; all.indeterminate = k > 0 && k < mine.length;
+  });
+  $('presetSummary').textContent = on.length ? `${on.length} selected${occ ? `, ${occ} will replace an existing channel` : ''}` : 'Nothing selected';
+  $('btnPresetApply').disabled = !on.length;
+}
+function onPresetChange(ev) {
+  const all = ev.target.dataset.packAll;
+  if (all) ev.target.closest('fieldset').querySelectorAll('[data-pi]').forEach(b => b.checked = ev.target.checked);
+  updatePresetSummary();
+}
+function applyPresets() {
+  const p = state.profile, items = presetsFor(p).flatMap(pk => pk.items);
+  const keys = new Set([...$('presetList').querySelectorAll('[data-pi]:checked')].map(b => b.dataset.pi));
+  const chosen = items.filter(it => keys.has(it.key)); if (!chosen.length) return;
+  const occ = chosen.filter(it => !R.decodeChannel(p, state.img, it.n).empty);
+  if (occ.length && !confirm(`${occ.length} channel${occ.length > 1 ? 's' : ''} already in use will be replaced (${occ.slice(0, 8).map(it => it.n).join(', ')}${occ.length > 8 ? ', …' : ''}). Continue?`)) return;
+  const snap = snapshot(), failed = []; let ok = 0;
+  for (const it of chosen) {
+    try { commitChannel(presetChannel(p, it), R.decodeChannel(p, state.img, it.n)); ok++; }
+    catch (e) { failed.push(`${it.n} ${it.name} (${e.message})`); }
+  }
+  if (ok) pushUndo(snap);
+  if (failed.length) log('Presets skipped: ' + failed.join('; '), 'e');
+  $('presetDlg').close();
+  state.query = ''; $('search').value = ''; state.page = Math.floor((chosen[0].n - p.channels[0]) / PAGE);
+  renderAll(); toast(`Added ${ok} preset channel${ok === 1 ? '' : 's'}${failed.length ? `, skipped ${failed.length} (see Log)` : ''}`);
 }
 
 // ---------- settings ----------
@@ -1199,10 +1531,10 @@ function markDirty(key, el) { state.dirtyOther.add(key); state.edited = true; el
 function vfoFields(fs, w, prefix) {
   const p = state.profile, img = state.img;
   const f = textInput(fmtMHz(R.vfoFreqGet(img, p, w)), `vfo${w}f`, 11, true);
-  f.onchange = () => { try { const hz = parseMHz(f.value); if (!R.inBands(hz, p.bands)) throw new Error('Frequency is outside the radio ranges'); R.vfoFreqSet(img, p, w, hz); f.classList.remove('bad'); markDirty('vf' + w, f); } catch (e) { f.classList.add('bad'); toast(e.message); } };
+  f.onchange = () => { try { const hz = parseMHz(f.value); if (!R.inBands(hz, p.bands)) throw new Error('Frequency is outside the radio ranges'); const snap = snapshot(); R.vfoFreqSet(img, p, w, hz); pushUndo(snap); f.classList.remove('bad'); markDirty('vf' + w, f); } catch (e) { f.classList.add('bad'); toast(e.message); } };
   fs.appendChild(field(prefix + 'Frequency (MHz)', f));
   const o = textInput((R.vfoOffGet(img, p, w) / 1e6).toFixed(3), `vfo${w}o`, 8, true);
-  o.onchange = () => { const x = parseFloat(o.value); if (isNaN(x) || x < 0 || x > 999.999) { o.classList.add('bad'); return toast('Offset must be 0–999.999 MHz'); } R.vfoOffSet(img, p, w, Math.round(x * 1e3) * 1e3); o.classList.remove('bad'); markDirty('vo' + w, o); };
+  o.onchange = () => { const x = parseFloat(o.value); if (isNaN(x) || x < 0 || x > 999.999) { o.classList.add('bad'); return toast('Offset must be 0–999.999 MHz'); } pushUndo(snapshot()); R.vfoOffSet(img, p, w, Math.round(x * 1e3) * 1e3); o.classList.remove('bad'); markDirty('vo' + w, o); };
   fs.appendChild(field(prefix + 'Offset (MHz)', o));
 }
 function renderSettings() {
@@ -1227,7 +1559,7 @@ function renderSettings() {
         if (v < 0) { const raw = R.settingRaw(img, s).map(x => x.toString(16).padStart(2, '0')).join(' '); ctl.add(new Option(`Unknown (0x${raw})`, -1, true, true)); }
       }
       ctl.id = 'set' + i;
-      ctl.addEventListener('change', () => { const idx = isBool ? (ctl.checked ? 1 : 0) : +ctl.value; if (idx < 0) return; R.settingSet(img, s, idx); markDirty('s' + i, ctl); });
+      ctl.addEventListener('change', () => { const idx = isBool ? (ctl.checked ? 1 : 0) : +ctl.value; if (idx < 0) return; pushUndo(snapshot()); R.settingSet(img, s, idx); markDirty('s' + i, ctl); });
       fs.appendChild(field(s.label, ctl, state.dirtyOther.has('s' + i)));
     }
     // texts, pairing "x.code" with "x.name"
@@ -1238,7 +1570,7 @@ function renderSettings() {
       const mk = (tt, ii) => {
         const inp = textInput(R.textGet(img, tt), 'txt' + ii, tt.len, tt.enc === 'dtmf');
         inp.setAttribute('aria-label', tt.label);
-        inp.onchange = () => { try { R.textSet(img, tt, inp.value); inp.classList.remove('bad'); markDirty('t' + ii, inp); } catch (e) { inp.classList.add('bad'); toast(e.message); } };
+        inp.onchange = () => { try { const snap = snapshot(); R.textSet(img, tt, inp.value); pushUndo(snap); inp.classList.remove('bad'); markDirty('t' + ii, inp); } catch (e) { inp.classList.add('bad'); toast(e.message); } };
         return inp;
       };
       if (pairIdx) {
@@ -1318,14 +1650,18 @@ async function openFile(file) {
   showError(null);
   try {
     const buf = await file.arrayBuffer();
-    if (/\.csv$/i.test(file.name)) { const msg = importCsv(new TextDecoder().decode(buf)); renderAll(); toast(msg); log(msg, 'o'); return; }
+    if (/\.csv$/i.test(file.name)) {
+      const snap = state.img ? snapshot() : null, msg = importCsv(new TextDecoder().decode(buf));
+      if (snap) pushUndo(snap);
+      renderAll(); toast(msg); log(msg, 'o'); return;
+    }
     const { data, meta } = R.splitImg(buf);
     const p = detectProfile(data, meta);
     if (!p) throw new Error(`This file (${data.length} bytes${meta.model ? `, ${meta.vendor} ${meta.model}` : ''}) doesn't match any model this programmer supports.`);
     const img = R.fitImage(p, data);
     if (p !== state.profile) setProfile(p.id);
     state.img = img; state.imgProfile = p.id; state.source = 'file'; state.fileName = file.name; state.fromRadio = false;
-    state.dirtyCh.clear(); state.dirtyOther.clear(); state.edited = false;
+    state.dirtyCh.clear(); state.dirtyOther.clear(); state.edited = false; imageReplaced();
     for (let n = p.channels[0]; n <= p.channels[1]; n++) if (img[R.chanOff(p, n)] !== 0xFF) state.dirtyCh.add(n);
     state.dirtyOther.add('file');
     renderAll(); toast(`Opened ${file.name} as ${p.label}`); log(`Opened ${file.name} as ${p.label}${meta.model ? ` (file says ${meta.vendor} ${meta.model})` : ' (matched by size)'}`, 'o');
@@ -1388,6 +1724,28 @@ function init() {
   $('btnCsv').onclick = exportCsv;
   $('gridBody').addEventListener('change', onGridChange);
   $('gridBody').addEventListener('click', onGridClick);
+  $('gridHead').addEventListener('change', e => { if (e.target.id === 'selAll') setPicked(shownNumbers(), e.target.checked); });
+  $('btnSelNone').onclick = () => { state.selected.clear(); renderGrid(); };
+  $('btnBulkDel').onclick = bulkDelete;
+  $('btnBulkEdit').onclick = openBulkEdit;
+  $('bulkFields').addEventListener('input', onBulkInput);
+  $('bulkFields').addEventListener('change', onBulkInput);
+  $('btnBulkApply').onclick = applyBulkEdit;
+  $('gridBody').addEventListener('dragstart', onDragStart);
+  $('gridBody').addEventListener('dragover', onDragOver);
+  $('gridBody').addEventListener('drop', onDrop);
+  $('gridBody').addEventListener('dragend', () => { dragFrom = null; clearDropMarks(); });
+  $('btnUndo').onclick = () => stepHistory(true);
+  $('btnRedo').onclick = () => stepHistory(false);
+  document.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase(); if (k !== 'z' && k !== 'y') return;
+    const t = e.target; if (t.matches?.('input[type=text], input[type=search], input[type=number], textarea, select') || $('presetDlg').open || $('bulkDlg').open) return;
+    e.preventDefault(); stepHistory(k === 'z' && !e.shiftKey);
+  });
+  $('btnPresets').onclick = openPresets;
+  $('presetList').addEventListener('change', onPresetChange);
+  $('btnPresetApply').onclick = applyPresets;
   $('showEmpty').onchange = e => { state.showEmpty = e.target.checked; renderGrid(); };
   let st; $('search').oninput = e => { clearTimeout(st); st = setTimeout(() => { state.query = e.target.value; renderGrid(); renderPages(); }, 150); };
   document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
