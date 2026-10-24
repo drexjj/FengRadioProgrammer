@@ -144,12 +144,15 @@ table.grid { border-collapse: separate; border-spacing: 0; width: 100%; font-siz
 .shift.split, .shift.rxonly { color: var(--warn); }
 .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; }
 .x:hover { color: var(--bad); background: var(--bad-soft); }
-.selcell { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; width: 100%; cursor: pointer; }
+.lead { display: flex; align-items: center; gap: 4px; }
+.selcell { display: flex; flex: 1; gap: 8px; align-items: center; justify-content: space-between; cursor: pointer; }
 .grid tr.sel td { background: var(--accent-soft); }
 .selinfo { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
 .acts { display: inline-flex; align-items: center; }
 .acts .x { padding: 4px 5px; }
-.grip { cursor: grab; color: var(--muted); padding: 4px; user-select: none; -webkit-user-select: none; }
+.grip { cursor: grab; color: var(--muted); font-size: 24px; line-height: 16px; width: 16px; text-align: center; user-select: none; -webkit-user-select: none; }
+.grip:hover { color: var(--ink); }
+.grip.off { visibility: hidden; }
 .grid tr.dragging td { opacity: .5; }
 .grid tr.drop-above td { box-shadow: inset 0 2px 0 var(--accent); }
 .grid tr.drop-below td { box-shadow: inset 0 -2px 0 var(--accent); }
@@ -241,7 +244,7 @@ footer p { margin: 0; max-width: 90ch; }
     </div>
     <div class="step" id="st3">
       <div class="head"><span class="num">3</span><h2>Edit</h2></div>
-      <p>Change channels below, or open a CHIRP <span class="mono">.img</span> or CSV file.</p>
+      <p>Change channels below, or open a CHIRP <span class="mono">.img</span> (replaces everything) or a CSV channel list (you check each row first). For local repeaters, export a CHIRP CSV from <a href="https://www.repeaterbook.com" target="_blank" rel="noopener">RepeaterBook</a> and open it here.</p>
       <div class="row">
         <button class="btn small" id="btnOpen">Open file</button>
         <button class="btn small" id="btnSave">Save .img</button>
@@ -285,7 +288,6 @@ footer p { margin: 0; max-width: 90ch; }
         <label><input type="checkbox" id="showEmpty"> Show empty slots</label>
         <input type="search" id="search" placeholder="Find name or MHz" aria-label="Find channel">
         <button class="btn small" id="btnPresets" type="button">Add presets</button>
-        <button class="btn small" id="btnImport" type="button">Import list</button>
         <button class="btn small" id="btnUndo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
         <button class="btn small" id="btnRedo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
         <span class="selinfo" id="selInfo" hidden><span id="selCount"></span><button class="btn small" id="btnBulkEdit" type="button">Edit…</button><button class="btn small" id="btnBulkDel" type="button">Delete</button><button class="btn small" id="btnBulkCsv" type="button" title="Save the selected channels as a CSV you can share">Export</button><button class="link" id="btnSelNone" type="button">Clear selection</button></span>
@@ -298,7 +300,7 @@ footer p { margin: 0; max-width: 90ch; }
           <tbody id="gridBody"></tbody>
         </table>
       </div>
-      <p class="muted" style="margin:0;font-size:12px">TX accepts an absolute frequency, a shift such as <span class="mono">+0.6</span> or <span class="mono">-5</span>, or <span class="mono">off</span> for receive-only. Tones take <span class="mono">100.0</span>, <span class="mono">D023N</span> or <span class="mono">D023I</span>; leave blank for none. Type a frequency into an empty slot to create a channel. Tick rows to edit or delete several at once (shift-click picks a range). Drag <span aria-hidden="true">⠿</span> or use ▲ ▼ to move a channel, and ⧉ to copy it to the next empty slot.</p>
+      <p class="muted" style="margin:0;font-size:12px">TX accepts an absolute frequency, a shift such as <span class="mono">+0.6</span> or <span class="mono">-5</span>, or <span class="mono">off</span> for receive-only. Tones take <span class="mono">100.0</span>, <span class="mono">D023N</span> or <span class="mono">D023I</span>; leave blank for none. Type a frequency into an empty slot to create a channel. Tick rows to edit or delete several at once (shift-click picks a range). Drag <span aria-hidden="true">⠿</span> or use ▲ ▼ to move a channel.</p>
     </div>
 
     <div class="pane" data-pane="settings" hidden><div class="cards" id="settingsCards"></div></div>
@@ -346,7 +348,7 @@ footer p { margin: 0; max-width: 90ch; }
   <form method="dialog" class="dlg-body">
     <div class="dlg-head"><h3 id="importTitle">Import channels</h3><button class="x" value="cancel" aria-label="Close">✕</button></div>
     <div class="impopts">
-      <p id="importIntro">Open a CHIRP CSV file: a repeater list from RepeaterBook, a channel pack someone shared, or a list exported from CHIRP or this page. You can check every row before anything changes.</p>
+      <p id="importIntro"></p>
       <details id="importHelp">
         <summary>Getting a repeater list from RepeaterBook</summary>
         <ol>
@@ -356,7 +358,7 @@ footer p { margin: 0; max-width: 90ch; }
           <li>Open the downloaded CSV here.</li>
         </ol>
       </details>
-      <div class="row" id="importPlace" hidden>
+      <div class="row" id="importPlace">
         <label>Starting at channel <input type="number" id="impStart"></label>
         <label><input type="radio" name="impMode" value="fill" checked> Only empty channels</label>
         <label><input type="radio" name="impMode" value="seq"> Consecutive channels (replaces what's there)</label>
@@ -364,7 +366,7 @@ footer p { margin: 0; max-width: 90ch; }
       </div>
     </div>
     <div class="presetlist" id="importList"></div>
-    <div class="dlg-foot"><span class="muted" id="importSummary"></span><span class="spacer"></span><button class="btn" id="btnImportPick" type="button">Choose CSV file</button><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnImportApply" type="button" hidden>Import</button></div>
+    <div class="dlg-foot"><span class="muted" id="importSummary"></span><span class="spacer"></span><button class="btn" id="btnImportPick" type="button">Choose another file</button><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnImportApply" type="button">Import</button></div>
     <input type="file" id="csvIn" accept=".csv,text/csv" hidden>
   </form>
 </dialog>
@@ -1136,7 +1138,7 @@ function updateChrome() {
   $('model').disabled = busy;
   $('btnOpen').disabled = busy;
   $('btnSave').disabled = !has; $('btnCsv').disabled = !has;
-  $('btnPresets').disabled = !has || busy; $('btnImport').disabled = !has || busy; updateHistoryButtons();
+  $('btnPresets').disabled = !has || busy; updateHistoryButtons();
   $('btnRead').disabled = !t || busy;
   const imgOk = has && state.imgProfile === p.id && state.source !== 'none';
   $('btnWrite').disabled = !t || busy || !imgOk;
@@ -1176,7 +1178,7 @@ const EXTRA_HEAD = { bcl: ['BCL', 'Busy channel lockout'], pttid: ['PTT ID', 'Wh
 function buildGridHead() {
   const p = state.profile;
   const ex = p.extras.map(e => { const [h, t] = EXTRA_HEAD[e.key] || [e.label, '']; return `<th title="${esc(t)}">${esc(h)}</th>`; }).join('');
-  $('gridHead').innerHTML = `<tr><th><label class="selcell"><input type="checkbox" id="selAll" aria-label="Select all shown channels">CH</label></th><th>Name</th><th>RX MHz</th><th>TX MHz</th><th>Shift</th><th title="Decode: CTCSS Hz or DCS like D023N">RX tone</th><th title="Encode: CTCSS Hz or DCS like D023N">TX tone</th><th>Power</th><th>Mode</th><th title="Include in scan">Scan</th>${ex}<th></th></tr>`;
+  $('gridHead').innerHTML = `<tr><th><span class="lead"><span class="grip off" aria-hidden="true">⠿</span><label class="selcell"><input type="checkbox" id="selAll" aria-label="Select all shown channels">CH</label></span></th><th>Name</th><th>RX MHz</th><th>TX MHz</th><th>Shift</th><th title="Decode: CTCSS Hz or DCS like D023N">RX tone</th><th title="Encode: CTCSS Hz or DCS like D023N">TX tone</th><th>Power</th><th>Mode</th><th title="Include in scan">Scan</th>${ex}<th></th></tr>`;
   $('tones').innerHTML = [...R.CTCSS.map(v => v.toFixed(1)), ...p.dcs.map(v => 'D' + String(v).padStart(3, '0') + 'N'), ...p.dcs.map(v => 'D' + String(v).padStart(3, '0') + 'I')].map(o => `<option value="${o}">`).join('');
 }
 function shiftInfo(c) {
@@ -1226,7 +1228,7 @@ function rowHtml(c) {
   const modeOpts = p.modes.filter(m => m !== 'AM');
   const picked = state.selected.has(c.n);
   return `<tr data-n="${c.n}" class="${e ? 'empty' : ''}${state.dirtyCh.has(c.n) ? ' dirty' : ''}${picked ? ' sel' : ''}">
-    <td><label class="selcell"><input type="checkbox" data-sel ${picked ? 'checked' : ''} aria-label="Select channel ${c.n}">${c.n}</label></td>
+    <td><span class="lead"><span class="grip${e || locks.length ? ' off' : ''}"${e || locks.length ? '' : ' draggable="true" title="Drag to move"'} aria-hidden="true">⠿</span><label class="selcell"><input type="checkbox" data-sel ${picked ? 'checked' : ''} aria-label="Select channel ${c.n}">${c.n}</label></span></td>
     <td><input type="text" class="w-name" data-k="name" maxlength="${p.nameLen}" value="${e ? '' : esc(c.name)}" aria-label="Name"></td>
     <td class="rxcell"><input type="text" class="w-freq f" data-k="rx" value="${e ? '' : fmtMHz(c.rx)}" placeholder="${e ? '—' : ''}" aria-label="RX frequency"${locked('rx')}></td>
     <td><input type="text" class="w-freq f" data-k="tx" value="${e ? '' : c.tx == null ? 'off' : fmtMHz(c.tx)}" aria-label="TX frequency"${locked('tx')}></td>
@@ -1237,7 +1239,7 @@ function rowHtml(c) {
     <td>${isAM ? '<span class="shift">AM</span>' : sel(modeOpts, e ? 0 : Math.max(0, modeOpts.indexOf(c.mode)), `data-k="mode" aria-label="Mode"${locked('mode')}`)}</td>
     <td class="c"><input type="checkbox" data-k="scan" ${e || c.scan ? 'checked' : ''} aria-label="Scan"></td>
     ${ex}
-    <td>${e || locks.length ? '' : `<span class="acts"><span class="grip" draggable="true" title="Drag to move" aria-hidden="true">⠿</span><button class="x" data-act="up" title="Move up" aria-label="Move channel ${c.n} up">▲</button><button class="x" data-act="down" title="Move down" aria-label="Move channel ${c.n} down">▼</button><button class="x" data-act="dup" title="Copy to the next empty channel" aria-label="Copy channel ${c.n} to the next empty channel">⧉</button><button class="x" data-act="clear" title="Clear channel ${c.n}" aria-label="Clear channel ${c.n}">✕</button></span>`}</td>
+    <td>${e || locks.length ? '' : `<span class="acts"><button class="x" data-act="up" title="Move up" aria-label="Move channel ${c.n} up">▲</button><button class="x" data-act="down" title="Move down" aria-label="Move channel ${c.n} down">▼</button><button class="x" data-act="clear" title="Clear channel ${c.n}" aria-label="Clear channel ${c.n}">✕</button></span>`}</td>
   </tr>`;
 }
 function renderGrid() {
@@ -1356,13 +1358,6 @@ function moveBy(n, dir, act) {
   const dest = doMove([Math.min(n, other), Math.max(n, other)], dir < 0 ? 1 : 0, dir < 0 ? 0 : 1);
   if (dest != null) $('gridBody').querySelector(`tr[data-n="${dest}"] [data-act="${act}"]`)?.focus();
 }
-function duplicate(n) {
-  const p = state.profile; let t = n + 1;
-  while (t <= p.channels[1] && (!isEmpty(t) || isFixed(t))) t++;
-  if (t > p.channels[1]) { toast(`No empty channel after ${n} to copy into`); return; }
-  const snap = snapshot(); writeSlot(t, readSlot(n)); pushUndo(snap);
-  renderGrid(); renderPages(); updateChrome(); toast(`Copied channel ${n} to ${t}`);
-}
 function bulkDelete() {
   const all = [...state.selected].filter(n => !isEmpty(n)), ns = all.filter(n => !isFixed(n)), kept = all.length - ns.length;
   if (!ns.length) { toast(kept ? 'Fixed GMRS channels can\'t be deleted' : 'The selected rows are already empty'); return; }
@@ -1434,7 +1429,7 @@ function applyBulkEdit() {
 let dragFrom = null;
 function clearDropMarks() { $('gridBody').querySelectorAll('.drop-above, .drop-below, .dragging').forEach(tr => tr.classList.remove('drop-above', 'drop-below', 'dragging')); }
 function onDragStart(e) {
-  const g = e.target.closest?.('.grip'); if (!g) return;
+  const g = e.target.closest?.('.grip:not(.off)'); if (!g) return;
   const tr = g.closest('tr'); dragFrom = +tr.dataset.n;
   e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(dragFrom));
   e.dataTransfer.setDragImage(tr, 20, 16); tr.classList.add('dragging');
@@ -1460,7 +1455,6 @@ function onGridClick(ev) {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const n = +b.closest('tr').dataset.n, act = b.dataset.act;
   if (act === 'up' || act === 'down') { moveBy(n, act === 'up' ? -1 : 1, act); return; }
-  if (act === 'dup') { duplicate(n); return; }
   pushUndo(snapshot());
   R.encodeChannel(state.profile, state.img, { n, empty: true }); state.dirtyCh.add(n); state.edited = true;
   renderGrid(); renderPages(); updateChrome(); toast(`Channel ${n} cleared`);
@@ -1644,7 +1638,7 @@ function exportCsv(only) {
   const k = rows.length - 1;
   if (only && !k) { toast('The selected rows are empty, so there is nothing to export'); return; }
   saveFile(new TextEncoder().encode(rows.join('\r\n') + '\r\n'), `${fileBase()}_${only ? `${k}ch_` : ''}${stamp()}.csv`, 'text/csv');
-  toast(only ? `Saved ${k} channel${k === 1 ? '' : 's'} as CSV. Share it, or open it with Import list on any radio.` : 'CSV saved. It imports into CHIRP and back into this page.');
+  toast(only ? `Saved ${k} channel${k === 1 ? '' : 's'} as CSV. Share it, or bring it into any radio with Open file.` : 'CSV saved. It imports into CHIRP and back into this page.');
 }
 function parseCsvLine(line) { const out = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; } else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; }
 // CHIRP CSV rows -> channels (without a slot yet); rows that can't be used carry `error`.
@@ -1675,7 +1669,6 @@ function parseCsvChannels(text) {
 
 // ---------- import with preview ----------
 let importRows = null, importFile = '';
-const IMPORT_INTRO = $('importIntro').textContent;
 function importTargets() {
   const [lo, hi] = state.profile.channels, mode = document.querySelector('[name=impMode]:checked').value;
   const start = Math.max(lo, Math.min(hi, parseInt($('impStart').value, 10) || lo));
@@ -1694,24 +1687,18 @@ function importTargets() {
   });
 }
 function openImport() {
-  const has = !!importRows, p = state.profile;
-  $('importPlace').hidden = !has; $('btnImportApply').hidden = !has; $('importHelp').open = !has;
-  $('btnImportPick').textContent = has ? 'Choose another file' : 'Choose CSV file';
-  if (!has) { $('importIntro').textContent = IMPORT_INTRO; $('importList').innerHTML = ''; $('importSummary').textContent = ''; }
-  else {
-    const bad = importRows.filter(r => r.error).length;
-    $('importIntro').textContent = `${importRows.length} row${importRows.length === 1 ? '' : 's'} in ${importFile}${bad ? `, ${bad} can't be used on the ${p.label}` : ''}. Untick any you don't want, then choose where they go.`;
-    document.querySelector('[name=impMode][value=fill]').checked = true;
-    $('impStart').min = p.channels[0]; $('impStart').max = p.channels[1];
-    if (!$('impStart').value) $('impStart').value = p.channels[0];
-    const rows = importRows.map((row, i) => {
-      if (row.error) return `<tr class="off"><td><input type="checkbox" data-ir="${i}" disabled aria-label="${esc(row.label)}"></td><td class="mono"></td><td>${esc(row.label)}</td><td></td><td></td><td></td><td class="bad">Skipped: ${esc(row.error)}</td></tr>`;
-      const c = row.c, tone = R.toneStr(c.txTone);
-      return `<tr><td><input type="checkbox" data-ir="${i}" checked aria-label="${esc(c.name || fmtMHz(c.rx))}"></td><td class="mono" data-to></td><td>${esc(c.name)}</td><td class="mono">${fmtMHz(c.rx)}</td><td>${shiftInfo(c)[0]}</td><td class="mono">${esc(tone)}</td><td data-note></td></tr>`;
-    }).join('');
-    $('importList').innerHTML = `<table class="ptab"><thead><tr><td><input type="checkbox" id="impAll" checked aria-label="Select all rows"></td><td>To CH</td><td>Name</td><td>RX MHz</td><td>Shift</td><td>Tone</td><td></td></tr></thead><tbody>${rows}</tbody></table>`;
-    refreshImport();
-  }
+  const p = state.profile, bad = importRows.filter(r => r.error).length;
+  $('importIntro').textContent = `${importRows.length} row${importRows.length === 1 ? '' : 's'} in ${importFile}${bad ? `, ${bad} can't be used on the ${p.label}` : ''}. Untick any you don't want, then choose where they go.`;
+  document.querySelector('[name=impMode][value=fill]').checked = true;
+  $('impStart').min = p.channels[0]; $('impStart').max = p.channels[1];
+  if (!$('impStart').value) $('impStart').value = p.channels[0];
+  const rows = importRows.map((row, i) => {
+    if (row.error) return `<tr class="off"><td><input type="checkbox" data-ir="${i}" disabled aria-label="${esc(row.label)}"></td><td class="mono"></td><td>${esc(row.label)}</td><td></td><td></td><td></td><td class="bad">Skipped: ${esc(row.error)}</td></tr>`;
+    const c = row.c, tone = R.toneStr(c.txTone);
+    return `<tr><td><input type="checkbox" data-ir="${i}" checked aria-label="${esc(c.name || fmtMHz(c.rx))}"></td><td class="mono" data-to></td><td>${esc(c.name)}</td><td class="mono">${fmtMHz(c.rx)}</td><td>${shiftInfo(c)[0]}</td><td class="mono">${esc(tone)}</td><td data-note></td></tr>`;
+  }).join('');
+  $('importList').innerHTML = `<table class="ptab"><thead><tr><td><input type="checkbox" id="impAll" checked aria-label="Select all rows"></td><td>To CH</td><td>Name</td><td>RX MHz</td><td>Shift</td><td>Tone</td><td></td></tr></thead><tbody>${rows}</tbody></table>`;
+  refreshImport();
   if (!$('importDlg').open) $('importDlg').showModal();
 }
 function refreshImport() {
@@ -1844,7 +1831,6 @@ function init() {
   $('btnSave').onclick = () => { saveFile(R.buildImg(state.profile, state.img), `${fileBase()}_${stamp()}.img`); toast(`Image saved. Open it in CHIRP as Baofeng ${state.profile.model}.`); };
   $('btnCsv').onclick = () => exportCsv();
   $('btnBulkCsv').onclick = () => exportCsv(new Set(state.selected));
-  $('btnImport').onclick = () => { importRows = null; openImport(); };
   $('btnImportPick').onclick = () => $('csvIn').click();
   $('csvIn').onchange = e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; };
   $('importList').addEventListener('change', onImportChange);
