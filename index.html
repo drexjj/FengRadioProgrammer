@@ -157,6 +157,16 @@ table.grid { border-collapse: separate; border-spacing: 0; width: 100%; font-siz
 .bulkgrid label { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
 .bulkgrid select, .bulkgrid input[type=text] { border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 6px 8px; width: 100%; }
 .bulkgrid input.bad { border-color: var(--bad); background: var(--bad-soft); }
+.impopts { padding: 10px 16px 0; display: grid; gap: 8px; font-size: 13px; }
+.impopts p { margin: 0; }
+.impopts .row { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.impopts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.impopts input[type=number] { width: 80px; border: 1px solid var(--line); background: var(--sunk); border-radius: 5px; padding: 4px 6px; }
+.impopts details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.impopts details ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.ptab td.bad { color: var(--bad); white-space: normal; }
+.ptab thead td { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.ptab tr.off td:not(:first-child) { opacity: .5; }
 
 /* preset picker */
 dialog.dlg { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100% - 32px)); max-height: calc(100vh - 48px); }
@@ -275,9 +285,10 @@ footer p { margin: 0; max-width: 90ch; }
         <label><input type="checkbox" id="showEmpty"> Show empty slots</label>
         <input type="search" id="search" placeholder="Find name or MHz" aria-label="Find channel">
         <button class="btn small" id="btnPresets" type="button">Add presets</button>
+        <button class="btn small" id="btnImport" type="button">Import list</button>
         <button class="btn small" id="btnUndo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
         <button class="btn small" id="btnRedo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
-        <span class="selinfo" id="selInfo" hidden><span id="selCount"></span><button class="btn small" id="btnBulkEdit" type="button">Edit…</button><button class="btn small" id="btnBulkDel" type="button">Delete</button><button class="link" id="btnSelNone" type="button">Clear selection</button></span>
+        <span class="selinfo" id="selInfo" hidden><span id="selCount"></span><button class="btn small" id="btnBulkEdit" type="button">Edit…</button><button class="btn small" id="btnBulkDel" type="button">Delete</button><button class="btn small" id="btnBulkCsv" type="button" title="Save the selected channels as a CSV you can share">Export</button><button class="link" id="btnSelNone" type="button">Clear selection</button></span>
         <div class="spacer"></div>
         <div class="pages" id="pages" aria-label="Channel range"></div>
       </div>
@@ -329,6 +340,32 @@ footer p { margin: 0; max-width: 90ch; }
     <p class="muted" id="bulkIntro"></p>
     <div class="presetlist"><div class="bulkgrid" id="bulkFields"></div></div>
     <div class="dlg-foot"><span class="muted" id="bulkSummary"></span><span class="spacer"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnBulkApply" type="button">Apply</button></div>
+  </form>
+</dialog>
+<dialog class="dlg" id="importDlg" aria-labelledby="importTitle">
+  <form method="dialog" class="dlg-body">
+    <div class="dlg-head"><h3 id="importTitle">Import channels</h3><button class="x" value="cancel" aria-label="Close">✕</button></div>
+    <div class="impopts">
+      <p id="importIntro">Open a CHIRP CSV file: a repeater list from RepeaterBook, a channel pack someone shared, or a list exported from CHIRP or this page. You can check every row before anything changes.</p>
+      <details id="importHelp">
+        <summary>Getting a repeater list from RepeaterBook</summary>
+        <ol>
+          <li>Sign in at <a href="https://www.repeaterbook.com" target="_blank" rel="noopener">RepeaterBook.com</a>. Accounts are free with a ham or GMRS call sign.</li>
+          <li>Search for repeaters in your area.</li>
+          <li>Use the results page's export option and choose the CHIRP format.</li>
+          <li>Open the downloaded CSV here.</li>
+        </ol>
+      </details>
+      <div class="row" id="importPlace" hidden>
+        <label>Starting at channel <input type="number" id="impStart"></label>
+        <label><input type="radio" name="impMode" value="fill" checked> Only empty channels</label>
+        <label><input type="radio" name="impMode" value="seq"> Consecutive channels (replaces what's there)</label>
+        <label><input type="radio" name="impMode" value="keep"> Channel numbers from the file</label>
+      </div>
+    </div>
+    <div class="presetlist" id="importList"></div>
+    <div class="dlg-foot"><span class="muted" id="importSummary"></span><span class="spacer"></span><button class="btn" id="btnImportPick" type="button">Choose CSV file</button><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="btnImportApply" type="button" hidden>Import</button></div>
+    <input type="file" id="csvIn" accept=".csv,text/csv" hidden>
   </form>
 </dialog>
 
@@ -915,7 +952,10 @@ function log(msg, cls) {
   line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`; el.appendChild(line); el.scrollTop = el.scrollHeight;
 }
 let toastTimer;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3600); }
+function toast(msg) {
+  // An open modal dialog sits in the top layer; the toast must live inside it to be seen.
+  const t = $('toast'), host = document.querySelector('dialog[open]') || document.body; if (t.parentElement !== host) host.appendChild(t);
+  t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3600); }
 function showError(msg) { const e = $('errBox'); if (!msg) { e.hidden = true; return; } e.innerHTML = ''; const b = document.createElement('b'); b.textContent = 'Something went wrong. '; e.append(b, msg); e.hidden = false; log(msg, 'e'); }
 function progress(frac, label) {
   $('progWrap').hidden = frac == null; if (frac == null) return;
@@ -1096,7 +1136,7 @@ function updateChrome() {
   $('model').disabled = busy;
   $('btnOpen').disabled = busy;
   $('btnSave').disabled = !has; $('btnCsv').disabled = !has;
-  $('btnPresets').disabled = !has || busy; updateHistoryButtons();
+  $('btnPresets').disabled = !has || busy; $('btnImport').disabled = !has || busy; updateHistoryButtons();
   $('btnRead').disabled = !t || busy;
   const imgOk = has && state.imgProfile === p.id && state.source !== 'none';
   $('btnWrite').disabled = !t || busy || !imgOk;
@@ -1589,9 +1629,10 @@ function renderAll() { renderPages(); renderGrid(); renderSettings(); updateChro
 
 // ---------- files ----------
 const CSV_COLS = ['Location','Name','Frequency','Duplex','Offset','Tone','rToneFreq','cToneFreq','DtcsCode','DtcsPolarity','RxDtcsCode','CrossMode','Mode','TStep','Skip','Power','Comment','URCALL','RPT1CALL','RPT2CALL','DVCODE'];
-function exportCsv() {
+function exportCsv(only) {
   const p = state.profile, rows = [CSV_COLS.join(',')];
   for (let n = p.channels[0]; n <= p.channels[1]; n++) {
+    if (only && !only.has(n)) continue;
     const c = R.decodeChannel(p, state.img, n); if (c.empty) continue;
     const t = R.toChirpTones(c);
     let dup = '', off = 0;
@@ -1600,22 +1641,24 @@ function exportCsv() {
     rows.push([n, q(c.name), (c.rx / 1e6).toFixed(6), dup, (off / 1e6).toFixed(6), t.Tone, t.rToneFreq, t.cToneFreq, t.DtcsCode, t.DtcsPolarity, t.RxDtcsCode, t.CrossMode,
       c.mode, '5.00', c.scan ? '' : 'S', `${(p.power[c.power]?.watts || 0).toFixed(1)}W`, '', '', '', '', ''].join(','));
   }
-  saveFile(new TextEncoder().encode(rows.join('\r\n') + '\r\n'), `${fileBase()}_${stamp()}.csv`, 'text/csv');
-  toast('CSV saved. It imports into CHIRP and back into this page.');
+  const k = rows.length - 1;
+  if (only && !k) { toast('The selected rows are empty, so there is nothing to export'); return; }
+  saveFile(new TextEncoder().encode(rows.join('\r\n') + '\r\n'), `${fileBase()}_${only ? `${k}ch_` : ''}${stamp()}.csv`, 'text/csv');
+  toast(only ? `Saved ${k} channel${k === 1 ? '' : 's'} as CSV. Share it, or open it with Import list on any radio.` : 'CSV saved. It imports into CHIRP and back into this page.');
 }
 function parseCsvLine(line) { const out = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; } else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; }
-function importCsv(text) {
+// CHIRP CSV rows -> channels (without a slot yet); rows that can't be used carry `error`.
+function parseCsvChannels(text) {
   const p = state.profile;
-  if (!state.img) throw new Error(`Read the ${p.label} or open its .img first, then import the CSV into it. A CSV only holds channels, not the rest of the radio's memory.`);
-  const lines = text.split(/\r?\n/).filter(l => l.trim()); const head = parseCsvLine(lines.shift());
-  if (!head.includes('Frequency')) throw new Error('This CSV has no Frequency column. Export it from CHIRP or from this page.');
-  let ok = 0; const skipped = [];
-  for (const line of lines) {
-    const cells = parseCsvLine(line); const r = {}; head.forEach((h, i) => r[h] = (cells[i] || '').trim());
-    const n = parseInt(r.Location, 10);
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim()), head = parseCsvLine(lines.shift() || '').map(h => h.trim());
+  if (!head.includes('Frequency')) throw new Error('This CSV has no Frequency column. Export it from CHIRP, RepeaterBook (CHIRP format) or this page.');
+  return lines.map(line => {
+    const cells = parseCsvLine(line), r = {}; head.forEach((h, i) => r[h] = (cells[i] || '').trim());
+    const loc = parseInt(r.Location, 10);
     try {
-      if (!(n >= p.channels[0] && n <= p.channels[1])) throw new Error('location out of range');
-      const rx = parseMHz(r.Frequency); const c = newChannel(n, rx);
+      const rx = parseMHz(r.Frequency); if (rx == null) throw new Error('no frequency');
+      if (!R.inBands(rx, p.bands)) throw new Error(`${fmtMHz(rx)} MHz is outside the ${p.label}'s ranges`);
+      const c = newChannel(null, rx);
       c.name = (r.Name || '').slice(0, p.nameLen); if (p.family === 'uv5r') c.name = c.name.toUpperCase();
       c.name = [...c.name].filter(ch => p.nameChars.includes(ch) || ch === ' ').join('');
       const off = Math.round(parseFloat(r.Offset || '0') * 1e6);
@@ -1625,11 +1668,90 @@ function importCsv(text) {
       c.scan = r.Skip === 'S' ? 0 : 1;
       const w = parseFloat(r.Power);
       if (!isNaN(w)) { let best = 0; p.power.forEach((x, i) => { if (Math.abs(x.watts - w) < Math.abs(p.power[best].watts - w)) best = i; }); c.power = best; }
-      commitChannel(c, R.decodeChannel(p, state.img, n)); ok++;
-    } catch (e) { skipped.push(`${r.Location || '?'} (${e.message})`); }
+      return { loc, c };
+    } catch (e) { return { loc, label: r.Name || r.Frequency || '?', error: e.message }; }
+  });
+}
+
+// ---------- import with preview ----------
+let importRows = null, importFile = '';
+const IMPORT_INTRO = $('importIntro').textContent;
+function importTargets() {
+  const [lo, hi] = state.profile.channels, mode = document.querySelector('[name=impMode]:checked').value;
+  const start = Math.max(lo, Math.min(hi, parseInt($('impStart').value, 10) || lo));
+  const boxes = $('importList').querySelectorAll('[data-ir]'), used = new Set(); let next = start;
+  return importRows.map((row, i) => {
+    if (row.error || !boxes[i].checked) return null;
+    if (mode === 'keep') {
+      const n = row.loc;
+      if (!(n >= lo && n <= hi)) return { why: 'Channel number from the file is out of range' };
+      if (isFixed(n)) return { why: `Channel ${n} is a fixed GMRS channel` };
+      if (used.has(n)) return { why: `Channel ${n} appears twice in the file` };
+      used.add(n); return { n };
+    }
+    while (next <= hi && (isFixed(next) || (mode === 'fill' && !isEmpty(next)))) next++;
+    return next > hi ? { why: 'No free channel left' } : { n: next++ };
+  });
+}
+function openImport() {
+  const has = !!importRows, p = state.profile;
+  $('importPlace').hidden = !has; $('btnImportApply').hidden = !has; $('importHelp').open = !has;
+  $('btnImportPick').textContent = has ? 'Choose another file' : 'Choose CSV file';
+  if (!has) { $('importIntro').textContent = IMPORT_INTRO; $('importList').innerHTML = ''; $('importSummary').textContent = ''; }
+  else {
+    const bad = importRows.filter(r => r.error).length;
+    $('importIntro').textContent = `${importRows.length} row${importRows.length === 1 ? '' : 's'} in ${importFile}${bad ? `, ${bad} can't be used on the ${p.label}` : ''}. Untick any you don't want, then choose where they go.`;
+    document.querySelector('[name=impMode][value=fill]').checked = true;
+    $('impStart').min = p.channels[0]; $('impStart').max = p.channels[1];
+    if (!$('impStart').value) $('impStart').value = p.channels[0];
+    const rows = importRows.map((row, i) => {
+      if (row.error) return `<tr class="off"><td><input type="checkbox" data-ir="${i}" disabled aria-label="${esc(row.label)}"></td><td class="mono"></td><td>${esc(row.label)}</td><td></td><td></td><td></td><td class="bad">Skipped: ${esc(row.error)}</td></tr>`;
+      const c = row.c, tone = R.toneStr(c.txTone);
+      return `<tr><td><input type="checkbox" data-ir="${i}" checked aria-label="${esc(c.name || fmtMHz(c.rx))}"></td><td class="mono" data-to></td><td>${esc(c.name)}</td><td class="mono">${fmtMHz(c.rx)}</td><td>${shiftInfo(c)[0]}</td><td class="mono">${esc(tone)}</td><td data-note></td></tr>`;
+    }).join('');
+    $('importList').innerHTML = `<table class="ptab"><thead><tr><td><input type="checkbox" id="impAll" checked aria-label="Select all rows"></td><td>To CH</td><td>Name</td><td>RX MHz</td><td>Shift</td><td>Tone</td><td></td></tr></thead><tbody>${rows}</tbody></table>`;
+    refreshImport();
   }
-  if (skipped.length) log('CSV rows skipped: ' + skipped.join('; '), 'e');
-  return `Imported ${ok} channel${ok === 1 ? '' : 's'}${skipped.length ? `, skipped ${skipped.length} (see Log)` : ''}`;
+  if (!$('importDlg').open) $('importDlg').showModal();
+}
+function refreshImport() {
+  if (!importRows) return;
+  const p = state.profile, t = importTargets(), trs = $('importList').querySelectorAll('tbody tr');
+  let k = 0, rep = 0, miss = 0;
+  importRows.forEach((row, i) => {
+    if (row.error) return;
+    const tr = trs[i], on = tr.querySelector('[data-ir]').checked, to = tr.querySelector('[data-to]'), note = tr.querySelector('[data-note]'), x = t[i];
+    tr.classList.toggle('off', !on); note.className = ''; note.textContent = ''; to.textContent = x?.n ?? '';
+    if (!on) return;
+    if (x.why) { note.className = 'bad'; note.textContent = x.why; miss++; return; }
+    k++;
+    if (!isEmpty(x.n)) { const cur = R.decodeChannel(p, state.img, x.n); note.className = 'occ'; note.textContent = `Replaces ${cur.name ? `“${cur.name}”` : fmtMHz(cur.rx)}`; rep++; }
+  });
+  const boxes = [...$('importList').querySelectorAll('[data-ir]:not(:disabled)')], all = $('impAll'), on = boxes.filter(b => b.checked).length;
+  if (all) { all.checked = on > 0 && on === boxes.length; all.indeterminate = on > 0 && on < boxes.length; }
+  $('importSummary').textContent = k ? `${k} to import${rep ? `, ${rep} replace existing channels` : ''}${miss ? `, ${miss} won't fit` : ''}` : miss ? `${miss} won't fit` : 'Nothing selected';
+  $('btnImportApply').disabled = !k;
+}
+function onImportChange(ev) {
+  if (ev.target.id === 'impAll') $('importList').querySelectorAll('[data-ir]:not(:disabled)').forEach(b => b.checked = ev.target.checked);
+  refreshImport();
+}
+function applyImport() {
+  const p = state.profile, t = importTargets();
+  const go = importRows.map((row, i) => t[i]?.n != null ? { c: row.c, n: t[i].n } : null).filter(Boolean); if (!go.length) return;
+  const rep = go.filter(g => !isEmpty(g.n)).length;
+  if (rep && !confirm(`${rep} channel${rep > 1 ? 's' : ''} already in use will be replaced. Continue?`)) return;
+  const snap = snapshot(), failed = []; let ok = 0;
+  for (const g of go) {
+    const c = { ...JSON.parse(JSON.stringify(g.c)), n: g.n };
+    try { commitChannel(c, R.decodeChannel(p, state.img, g.n)); ok++; } catch (e) { failed.push(`${g.n} (${e.message})`); }
+  }
+  if (ok) pushUndo(snap);
+  if (failed.length) log('Import skipped: ' + failed.join('; '), 'e');
+  const msg = `Imported ${ok} channel${ok === 1 ? '' : 's'} from ${importFile}${failed.length ? `, skipped ${failed.length} (see Log)` : ''}`;
+  $('importDlg').close();
+  state.query = ''; $('search').value = ''; state.page = Math.floor((go[0].n - p.channels[0]) / PAGE);
+  renderAll(); toast(msg); log(msg, 'o');
 }
 function detectProfile(data, meta) {
   if (meta.rclass) { const p = PROFILES.find(x => x.rclass === meta.rclass); if (p) return p; }
@@ -1651,9 +1773,8 @@ async function openFile(file) {
   try {
     const buf = await file.arrayBuffer();
     if (/\.csv$/i.test(file.name)) {
-      const snap = state.img ? snapshot() : null, msg = importCsv(new TextDecoder().decode(buf));
-      if (snap) pushUndo(snap);
-      renderAll(); toast(msg); log(msg, 'o'); return;
+      if (!state.img) throw new Error(`Read the ${state.profile.label} or open its .img first, then import the CSV into it. A CSV only holds channels, not the rest of the radio's memory.`);
+      importRows = parseCsvChannels(new TextDecoder().decode(buf)); importFile = file.name; openImport(); return;
     }
     const { data, meta } = R.splitImg(buf);
     const p = detectProfile(data, meta);
@@ -1665,7 +1786,7 @@ async function openFile(file) {
     for (let n = p.channels[0]; n <= p.channels[1]; n++) if (img[R.chanOff(p, n)] !== 0xFF) state.dirtyCh.add(n);
     state.dirtyOther.add('file');
     renderAll(); toast(`Opened ${file.name} as ${p.label}`); log(`Opened ${file.name} as ${p.label}${meta.model ? ` (file says ${meta.vendor} ${meta.model})` : ' (matched by size)'}`, 'o');
-  } catch (e) { showError(e.message); }
+  } catch (e) { showError(e.message); if ($('importDlg').open) toast(e.message); }
 }
 
 // ---------- write confirmation ----------
@@ -1721,7 +1842,16 @@ function init() {
   $('btnOpen').onclick = () => $('fileIn').click();
   $('fileIn').onchange = e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; };
   $('btnSave').onclick = () => { saveFile(R.buildImg(state.profile, state.img), `${fileBase()}_${stamp()}.img`); toast(`Image saved. Open it in CHIRP as Baofeng ${state.profile.model}.`); };
-  $('btnCsv').onclick = exportCsv;
+  $('btnCsv').onclick = () => exportCsv();
+  $('btnBulkCsv').onclick = () => exportCsv(new Set(state.selected));
+  $('btnImport').onclick = () => { importRows = null; openImport(); };
+  $('btnImportPick').onclick = () => $('csvIn').click();
+  $('csvIn').onchange = e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; };
+  $('importList').addEventListener('change', onImportChange);
+  $('importPlace').addEventListener('change', refreshImport);
+  $('impStart').addEventListener('input', refreshImport);
+  $('btnImportApply').onclick = applyImport;
+  $('importDlg').addEventListener('close', () => { importRows = null; });
   $('gridBody').addEventListener('change', onGridChange);
   $('gridBody').addEventListener('click', onGridClick);
   $('gridHead').addEventListener('change', e => { if (e.target.id === 'selAll') setPicked(shownNumbers(), e.target.checked); });
@@ -1740,7 +1870,7 @@ function init() {
   document.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const k = e.key.toLowerCase(); if (k !== 'z' && k !== 'y') return;
-    const t = e.target; if (t.matches?.('input[type=text], input[type=search], input[type=number], textarea, select') || $('presetDlg').open || $('bulkDlg').open) return;
+    const t = e.target; if (t.matches?.('input[type=text], input[type=search], input[type=number], textarea, select') || document.querySelector('dialog[open]')) return;
     e.preventDefault(); stepHistory(k === 'z' && !e.shiftKey);
   });
   $('btnPresets').onclick = openPresets;

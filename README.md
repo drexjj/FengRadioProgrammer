@@ -20,6 +20,11 @@ Pair the radio, read it, edit everything in a CHIRP-style grid, and write it bac
 - **Works with CHIRP.** It opens and saves CHIRP `.img` images and CHIRP CSV channel lists, so you can move between the two freely.
 - **Backup on every read.** The radio's original image is kept in your browser, and you can save it as a file before you write anything.
 - **Quick entry.** In the TX column type an absolute frequency, a shift like `+0.6` or `-5`, or `off` for receive only. Type a frequency into an empty slot to create a channel.
+- **Preset channels.** **Add presets** offers ham 2 m/70 cm simplex, GMRS/FRS, MURS, NOAA weather, marine VHF and public-safety interoperability channels. Each has a fixed channel number (ham from 57, the rest from 200 on the 999/1000-channel radios; a compact layout on 128-channel radios), and you tick exactly the ones you want. Receive-only packs are written with TX off.
+- **Edit many channels at once.** Tick rows (shift-click for a range) to delete them, change one field across all of them, or export just those channels as a CSV to share.
+- **Move and copy.** Drag a channel by its ⠿ handle or use ▲ ▼ to reorder, and ⧉ to copy it to the next empty slot.
+- **Import lists with a preview.** **Import list** opens a CHIRP CSV, such as a repeater list exported from RepeaterBook in CHIRP format or a shared channel pack, shows every row, and fills empty channels from a number you choose instead of overwriting.
+- **Undo and redo** for channel, settings and VFO edits (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z).
 - **Demo mode.** "Try with a simulated radio" runs the full read and write cycle without any hardware.
 
 ## Compatibility
