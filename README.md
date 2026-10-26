@@ -63,11 +63,11 @@ Bluetooth programming uses [Web Bluetooth](https://developer.mozilla.org/docs/We
 | Platform | Browser |
 |---|---|
 | Windows, macOS, Linux, ChromeOS | Chrome, Edge or Opera |
-| Android | Chrome, Edge or Opera |
+| Android | Chrome, Edge or Opera for Bluetooth; current Chrome with WebUSB for USB cables |
 | iPhone and iPad | [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) (Safari has no Web Bluetooth) |
 | Firefox, Safari | Not supported |
 
-The USB cable option uses Web Serial and needs Chrome or Edge on a desktop computer.
+The USB cable option uses Web Serial on desktop. On Android, the app uses the WebUSB USB-device picker for common CH340, Prolific PL2303 and CP210x cables; use a current Chrome for Android with USB host/OTG support. Bluetooth remains the more widely compatible Android option.
 
 ## How to program your radio
 
