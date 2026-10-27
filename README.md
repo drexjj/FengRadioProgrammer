@@ -112,7 +112,7 @@ This is a hobby project, not affiliated with Baofeng or CHIRP. Always save a bac
 
 ## Credits
 
-- Created by **W9JES** with contributions from others
+- Created by **W9JES** with contributions from [others](https://github.com/drexjj/FengRadioProgrammer/graphs/contributors)
 - Radio protocols, memory layouts and settings from the [CHIRP project](https://github.com/kk7ds/chirp) and its contributors.
 
 ## License
