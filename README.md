@@ -31,7 +31,7 @@ Pair the radio, read it, edit everything in a CHIRP-style grid, and write it bac
 
 ### Radios
 
-Pick your radio from the **Radio model** list before connecting.
+Pick your radio from the **Radio model** list before connecting. The page starts with no model chosen; opening a CHIRP `.img` file picks the right model for you.
 
 | Radio | Connection | Status |
 |---|---|---|
@@ -47,6 +47,9 @@ Pick your radio from the **Radio model** list before connecting.
 | UV-25 / UV-25 Pro, UV-32 / UV-32 Pro | USB cable | Experimental |
 | UV-21Pro V2, UV-21Pro GPS | USB cable | Experimental |
 | 5RM, K6, BF-F8HP Pro | USB cable | Experimental |
+| UV-5G Plus | USB cable | Experimental |
+| UV-9R Pro (CHIRP's BF-A58, also RH5X) | USB cable, 9600 baud | Experimental |
+| DM-32UV / DM-32 (DMR) | USB cable | Experimental. See the note below |
 
 **Experimental** means the model's memory layout, settings and clone protocol come straight from CHIRP's driver and are checked byte for byte against CHIRP, but nobody has tested this programmer on that radio yet. Read first, save a backup `.img`, and please report how it went in a [GitHub issue](https://github.com/drexjj/FengRadioProgrammer/issues).
 
@@ -54,7 +57,9 @@ As a safety check, the programmer refuses to write when the connected radio iden
 
 The USB models need a Baofeng programming cable (the two-pin K-plug type). On Windows, install the cable's driver first (usually CH340 or Prolific).
 
-Not supported: UV-6R, UV-19 BT and GMRS-only models such as GM-5RH and GM-30.
+**DM-32UV:** you can edit analog and DMR channels (mode, color code, time slot, TX contact, RX group list, radio ID, scan list, squelch) and the radio's settings. Contacts, RX group lists, radio IDs, zones and scan lists are kept as they are on the radio; edit those in the Baofeng software or CHIRP for now. Deleting a channel also removes it from zones and scan lists, as CHIRP does, and moving channels is turned off because zones and scan lists refer to channel numbers. Writing only sends the 4 KB flash pages that changed and reads each one back to check it. A radio with a programming password is refused. Some CH340 cables corrupt data from this radio; an FTDI or CP2102 cable is recommended.
+
+Not supported yet: BF-5RH Pro (CHIRP has no finished driver for it), UV-6R, UV-19 BT and GMRS-only models such as GM-30.
 
 ### Browsers
 
@@ -89,10 +94,12 @@ The USB cable option uses Web Serial on desktop. On Android, the app uses the We
 
 ## How it works
 
-The radio's Bluetooth module is a serial bridge (characteristic `FFE1`), so Bluetooth and the USB cable carry the same clone protocol. The programmer has two protocol engines:
+The radio's Bluetooth module is a serial bridge (characteristic `FFE1`), so Bluetooth and the USB cable carry the same clone protocol. The programmer has four protocol engines:
 
 - **UV-17Pro family** (UV-5R Mini, UV-17Pro, UV-25, UV-32, K6 and others), ported from CHIRP's `baofeng_uv17Pro.py`: a 16-character handshake such as `PROGRAMCOLORPROU`, 64-byte block reads, 64- or 128-byte block writes, and XOR data encryption, at 115200 baud.
 - **Classic UV-5R family** (UV-5R, BF-F8HP, UV-82), ported from CHIRP's `uv5r.py`: a 7-byte magic handshake sent byte by byte, `S`/`X` block commands at 9600 baud, and CHIRP's firmware and aux-memory checks before writing.
+- **Baofeng common family** (UV-9R Pro / BF-A58), ported from CHIRP's `baofeng_common.py` and `baofeng_wp970i.py`: the same `S`/`X` block commands at 9600 baud with an `AA…DD` ident, a straight 8 KB memory read, and CHIRP's aux-memory checks before writing.
+- **DM-32UV** (DMR), ported from CHIRP's `baofeng_dm32uv.py`: `PSEARCH`/`PROGRAM` handshake at 115200 baud, a scan of the radio's tagged 4 KB flash pages, page reads, and verified page writes.
 
 Each model is a profile generated from its CHIRP driver: memory regions, channel layout, power levels, bands, and a byte-level table for every setting found by having CHIRP apply each option and recording what changed. The decoders and encoders are tested against CHIRP's own sample images for every model, and every model completes a read and write against a simulated radio.
 
@@ -112,7 +119,7 @@ This is a hobby project, not affiliated with Baofeng or CHIRP. Always save a bac
 
 ## Credits
 
-- Created by **W9JES**.
+- Created by **W9JES** with contributions from [others](https://github.com/drexjj/FengRadioProgrammer/graphs/contributors)
 - Radio protocols, memory layouts and settings from the [CHIRP project](https://github.com/kk7ds/chirp) and its contributors.
 
 ## License
