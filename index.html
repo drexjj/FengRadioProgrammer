@@ -983,6 +983,15 @@ const powerLabel = (p, i) => { const x = p.power[i]; return x ? `${x.label}${x.w
 
 // ---------- transports ----------
 const UART_SERVICES = [0xffe0, 0xff00, 0xfff0, 0xffb0, 0xae30, 0x18f0, '49535343-fe7d-4ae5-8fa9-9fafd205e455', '6e400001-b5a3-f393-e0a9-e50e24dcca9e'];
+const isAndroid = () => /Android/i.test(navigator.userAgent || '');
+const hasWebSerial = () => !!navigator.serial && typeof navigator.serial.requestPort === 'function';
+const hasWebUSB = () => !!navigator.usb && typeof navigator.usb.requestDevice === 'function';
+const USB_SERIAL_VIDS = [0x1a86, 0x067b, 0x10c4, 0x0403]; // CH340, Prolific, CP210x, FTDI
+function webSerialUnavailableMessage() {
+  return isAndroid()
+    ? 'This Android browser does not expose a USB serial interface. Try a current Chrome for Android with USB access, or use Bluetooth.'
+    : 'This browser has no Web Serial. Use Chrome or Edge on a desktop computer, or a supported Chrome browser on Android.';
+}
 class BleTransport {
   constructor() { this.isBle = true; this.rx = new RxBuffer(); }
   async connect() {
@@ -1027,25 +1036,151 @@ class BleTransport {
 class SerialTransport {
   constructor(baud) { this.isBle = false; this.rx = new RxBuffer(); this.baud = baud; this.label = `USB cable · ${baud} baud`; }
   async connect() {
-    if (!navigator.serial) throw new Error('This browser has no Web Serial. Use Chrome or Edge on a desktop computer.');
+    if (!hasWebSerial()) throw new Error(webSerialUnavailableMessage());
     this.port = await navigator.serial.requestPort();
+    this.onPortDisconnect = () => {
+      this.reading = false;
+      this.reader?.cancel().catch(() => {});
+      onDisconnected(this);
+    };
+    this.port.addEventListener?.('disconnect', this.onPortDisconnect);
     await this.port.open({ baudRate: this.baud });
     this.reading = true;
     (async () => {
-      while (this.reading && this.port.readable) {
-        this.reader = this.port.readable.getReader();
-        try { for (;;) { const { value, done } = await this.reader.read(); if (done) break; if (value) this.rx.push(value); } }
-        catch (e) { if (this.reading) log('Serial read error: ' + e.message, 'e'); }
-        finally { this.reader.releaseLock(); }
+      let lost = false;
+      try {
+        while (this.reading && this.port.readable) {
+          this.reader = this.port.readable.getReader();
+          try {
+            for (;;) {
+              const { value, done } = await this.reader.read();
+              if (done) { lost = true; break; }
+              if (value) this.rx.push(value);
+            }
+          } finally {
+            this.reader.releaseLock(); this.reader = null;
+          }
+          if (lost) break;
+        }
+      } catch (e) {
+        if (this.reading) { lost = true; log('Serial read error: ' + e.message, 'e'); }
       }
+      if (this.reading && lost) onDisconnected(this);
     })();
-    log(`USB serial port open at ${this.baud} baud`, 'o');
+    log(`USB serial port open at ${this.baud} baud${isAndroid() ? ' (Android Web Serial)' : ''}`, 'o');
     return this;
   }
   async write(bytes) { const w = this.port.writable.getWriter(); try { await w.write(bytes); } finally { w.releaseLock(); } }
   read(n, ms) { return this.rx.read(n, ms); }
   async flush() { await sleep(30); this.rx.clear(); }
-  async disconnect() { this.reading = false; try { await this.reader?.cancel(); } catch (e) {} try { await this.port?.close(); } catch (e) {} onDisconnected(this); }
+  async disconnect() {
+    this.reading = false;
+    try { await this.reader?.cancel(); } catch (e) {}
+    try { await this.port?.close(); } catch (e) {}
+    try { this.port?.removeEventListener?.('disconnect', this.onPortDisconnect); } catch (e) {}
+    onDisconnected(this);
+  }
+}
+class WebUsbTransport {
+  constructor(baud) { this.isBle = false; this.rx = new RxBuffer(); this.baud = baud; this.label = `USB cable · ${baud} baud (Android WebUSB)`; this.claimed = []; }
+  static findInterface(device, predicate) {
+    const config = device.configuration;
+    if (!config) throw new Error('The USB device has no active configuration.');
+    for (const iface of config.interfaces) {
+      for (const alt of iface.alternates) if (predicate(alt)) return { iface, alt };
+    }
+    return null;
+  }
+  static bulkInterface(device, classCode) {
+    return this.findInterface(device, alt => (classCode == null || alt.interfaceClass === classCode) && alt.endpoints.some(e => e.type === 'bulk' && e.direction === 'in') && alt.endpoints.some(e => e.type === 'bulk' && e.direction === 'out'));
+  }
+  static async requestDevice() {
+    if (!hasWebUSB()) throw new Error('This Android browser has no WebUSB. Try current Chrome for Android, or use Bluetooth.');
+    const filters = [{ classCode: 2 }, ...USB_SERIAL_VIDS.map(vendorId => ({ vendorId }))];
+    return navigator.usb.requestDevice({ filters });
+  }
+  async connect() {
+    this.device = await WebUsbTransport.requestDevice();
+    try {
+      await this.device.open();
+      if (!this.device.configuration) await this.device.selectConfiguration(1);
+      this.driver = this.device.vendorId === 0x1a86 ? 'ch340' : this.device.vendorId === 0x067b ? 'pl2303' : this.device.vendorId === 0x10c4 ? 'cp210x' : null;
+      const cdc = WebUsbTransport.findInterface(this.device, alt => alt.interfaceClass === 2), data = WebUsbTransport.bulkInterface(this.device, 10), vendor = WebUsbTransport.bulkInterface(this.device, 0xff) || WebUsbTransport.bulkInterface(this.device);
+      if (!this.driver && cdc && data) this.driver = 'cdc';
+      if (!this.driver || (this.driver === 'cdc' && (!cdc || !data)) || (this.driver !== 'cdc' && !vendor)) throw new Error('This USB adapter is not a supported serial cable. Use a CH340, Prolific PL2303, CP210x or USB CDC cable.');
+      this.controlInterface = this.driver === 'cdc' ? cdc.iface.interfaceNumber : vendor.iface.interfaceNumber;
+      this.dataInterface = this.driver === 'cdc' ? data.iface.interfaceNumber : vendor.iface.interfaceNumber;
+      this.inEndpoint = (this.driver === 'cdc' ? data.alt : vendor.alt).endpoints.find(e => e.type === 'bulk' && e.direction === 'in');
+      this.outEndpoint = (this.driver === 'cdc' ? data.alt : vendor.alt).endpoints.find(e => e.type === 'bulk' && e.direction === 'out');
+      for (const n of [...new Set([this.controlInterface, this.dataInterface])]) { await this.device.claimInterface(n); this.claimed.push(n); }
+      if (this.driver === 'cdc') await this.cdcInit();
+      else if (this.driver === 'ch340') await this.ch340Init();
+      else if (this.driver === 'pl2303') await this.pl2303Init();
+      else if (this.driver === 'cp210x') await this.cp210xInit();
+      this.reading = true; this.startReader();
+      log(`USB serial adapter ready (${this.driver}, ${this.baud} baud)`, 'o');
+      return this;
+    } catch (e) {
+      try { await this.device.close(); } catch (x) {}
+      throw new Error(e.message || String(e));
+    }
+  }
+  async control(setup, data) {
+    const r = await this.device.controlTransferOut(setup, data);
+    if (r.status !== 'ok') throw new Error(`USB control transfer failed (${r.status})`);
+  }
+  async cdcInit() {
+    const b = new ArrayBuffer(7), v = new DataView(b); v.setUint32(0, this.baud, true); v.setUint8(4, 0); v.setUint8(5, 0); v.setUint8(6, 8);
+    await this.control({ requestType: 'class', recipient: 'interface', request: 0x20, value: 0, index: this.controlInterface }, b);
+    await this.control({ requestType: 'class', recipient: 'interface', request: 0x22, value: 3, index: this.controlInterface });
+  }
+  async ch340Init() {
+    await this.control({ requestType: 'vendor', recipient: 'device', request: 0xa1, value: 0, index: 0 });
+    let factor = Math.floor(1532620800 / this.baud), divisor = 3;
+    while (factor > 0xfff0 && divisor > 0) { factor >>= 3; divisor--; }
+    if (factor > 0xfff0) throw new Error(`CH340 does not support ${this.baud} baud.`);
+    factor = 0x10000 - factor;
+    await this.control({ requestType: 'vendor', recipient: 'device', request: 0x9a, value: 0x1312, index: ((factor & 0xff00) | divisor) & 0xffff });
+    await this.control({ requestType: 'vendor', recipient: 'device', request: 0x9a, value: 0x0f2c, index: factor & 0xff });
+    await this.control({ requestType: 'vendor', recipient: 'device', request: 0xa4, value: 0xffff, index: 0 });
+  }
+  async pl2303Init() {
+    const hxn = [0x23a3, 0x23b3, 0x23c3, 0x23d3, 0x23e3, 0x23f3].includes(this.device.productId);
+    const read = value => this.device.controlTransferIn({ requestType: 'vendor', recipient: 'device', request: 1, value, index: 0 }, 1);
+    const write = (value, index) => this.control({ requestType: 'vendor', recipient: 'device', request: hxn ? 0x80 : 1, value, index });
+    if (!hxn) { await read(0x8484); await write(0x0404, 0); await read(0x8484); await read(0x8383); await read(0x8484); await write(0x0404, 1); await read(0x8484); await read(0x8383); await write(0, 1); await write(1, 0); await write(2, 0x44); }
+    const b = new ArrayBuffer(7), v = new DataView(b); v.setUint32(0, this.baud, true); v.setUint8(4, 0); v.setUint8(5, 0); v.setUint8(6, 8);
+    await this.control({ requestType: 'class', recipient: 'interface', request: 0x20, value: 0, index: 0 }, b);
+    await this.control({ requestType: 'class', recipient: 'interface', request: 0x22, value: 3, index: 0 });
+  }
+  async cp210xInit() {
+    const i = this.controlInterface, b = new ArrayBuffer(4), v = new DataView(b); v.setUint32(0, this.baud, true);
+    await this.control({ requestType: 'vendor', recipient: 'interface', request: 0, value: 1, index: i });
+    await this.control({ requestType: 'vendor', recipient: 'interface', request: 0x1e, value: 0, index: i }, b);
+    await this.control({ requestType: 'vendor', recipient: 'interface', request: 3, value: 8, index: i });
+    await this.control({ requestType: 'vendor', recipient: 'interface', request: 7, value: 0x0303, index: i });
+  }
+  startReader() {
+    this.readTask = (async () => {
+      try {
+        while (this.reading && this.device.opened) {
+          const r = await this.device.transferIn(this.inEndpoint.endpointNumber, this.inEndpoint.packetSize || 64);
+          if (r.status === 'stall') { await this.device.clearHalt('in', this.inEndpoint.endpointNumber); continue; }
+          if (r.status !== 'ok') throw new Error(`USB read failed (${r.status})`);
+          if (r.data?.byteLength) this.rx.push(new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength));
+        }
+      } catch (e) { if (this.reading) { log('USB serial read error: ' + e.message, 'e'); onDisconnected(this); } }
+    })();
+  }
+  async write(bytes) { for (let i = 0; i < bytes.length; i += 64) { const r = await this.device.transferOut(this.outEndpoint.endpointNumber, bytes.slice(i, i + 64)); if (r.status !== 'ok') throw new Error(`USB write failed (${r.status})`); } }
+  read(n, ms) { return this.rx.read(n, ms); }
+  async flush() { await sleep(30); this.rx.clear(); }
+  async disconnect() {
+    this.reading = false;
+    try { for (const n of this.claimed || []) await this.device.releaseInterface(n); } catch (e) {}
+    try { await this.device?.close(); } catch (e) {}
+    onDisconnected(this);
+  }
 }
 function onDisconnected(t) {
   if (state.transport !== t) return;
@@ -1063,6 +1198,7 @@ async function connect(kind) {
       t = new MockRadio(R, p, R.fitImage(p, b64ToBytes(s)), { latency: 2 });
       log(`Connected to a simulated ${p.label}`, 'o');
     } else if (kind === 'ble') t = await new BleTransport().connect();
+    else if (isAndroid() && hasWebUSB()) t = await new WebUsbTransport(p.baud).connect();
     else t = await new SerialTransport(p.baud).connect();
   } catch (e) {
     if (e.name === 'NotFoundError') { log('Pairing cancelled'); return; }
@@ -1148,7 +1284,7 @@ function updateChrome() {
   $('writeHint').textContent = !state.fromRadio ? 'Read from the radio first, so you have a backup of what is on it.'
     : dirty ? `${dirty} unsaved change${dirty > 1 ? 's' : ''} ready to send.` : 'No changes yet. Edit channels or settings to send them.';
   $('connectHint').textContent = p.ble ? 'Turn Bluetooth on in the radio menu, leave it on the main screen, then pair. A USB cable also works.'
-    : `Plug the programming cable firmly into the radio, turn it on with the volume up, then pick the cable's port.`;
+    : `Plug the programming cable firmly into the radio, turn it on with the volume up, then ${isAndroid() && hasWebUSB() ? 'pick it in the Android USB device picker' : 'pick the cable\'s port'}.`;
   $('readHint').textContent = `Downloads all ${total} channels and settings.` + (p.ble ? ' About 30 seconds over Bluetooth.' : p.family === 'uv5r' ? ' About 15 seconds.' : '');
   const steps = [!!t, state.fromRadio, dirty > 0 || state.source === 'file', false];
   const cur = !t ? 0 : !state.fromRadio && state.source !== 'file' ? 1 : dirty || state.source === 'file' ? 3 : 2;
@@ -1159,7 +1295,7 @@ function renderModelNote() {
   const p = state.profile, n = $('modelNote');
   const parts = [];
   parts.push(p.tested ? '<b class="ok">Tested on a real radio.</b>' : '<b class="warnc">Experimental.</b> Matches CHIRP\'s driver byte for byte, not yet tested on a real radio. Save a backup before writing.');
-  parts.push(p.ble ? 'Bluetooth or USB cable.' : `USB cable only (${p.baud} baud), Chrome or Edge on a computer.`);
+  parts.push(p.ble ? 'Bluetooth or USB cable.' : `USB cable only (${p.baud} baud), using Web Serial on desktop or the Android USB picker.`);
   n.innerHTML = parts.join(' ');
 }
 function setProfile(id, why) {
@@ -1811,7 +1947,12 @@ function initSupport() {
   if (!navigator.bluetooth) notes.push(ios ? 'Safari on iPhone and iPad has no Web Bluetooth. Open this page in the <b>Bluefy</b> browser instead.' : 'This browser has no Web Bluetooth. Use <b>Chrome</b>, <b>Edge</b> or <b>Opera</b> on desktop or Android.');
   if (!window.isSecureContext) notes.push('This page is not on HTTPS or localhost, so the browser will refuse Bluetooth and USB access.');
   if (window.top !== window.self) notes.push('This page is embedded in another page, which usually blocks Bluetooth. Open it directly in its own tab.');
-  if (!navigator.serial) $('btnUsb').title = 'Web Serial needs Chrome or Edge on desktop';
+  if (!hasWebSerial() && !(isAndroid() && hasWebUSB())) {
+    $('btnUsb').title = isAndroid() ? 'Web Serial/WebUSB is not available in this Android browser' : 'Web Serial needs Chrome or Edge on desktop, or a supported browser on Android';
+    notes.push(isAndroid() ? 'USB cable programming is unavailable in this Android browser. Try current Chrome for Android with USB access, or use Bluetooth.' : 'USB cable programming needs Web Serial in Chrome or Edge on desktop, or a supported browser on Android.');
+  } else if (isAndroid() && hasWebUSB()) {
+    $('btnUsb').title = 'Choose the cable in the Android USB device picker';
+  }
   if (notes.length) { $('support').innerHTML = notes.join(' '); $('support').hidden = false; }
 }
 function init() {
