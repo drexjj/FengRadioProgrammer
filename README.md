@@ -124,5 +124,5 @@ This is a hobby project, not affiliated with Baofeng or CHIRP. Always save a bac
 
 ## License
 
-GPL-3.0. See [LICENSE](LICENSE).
+PolyForm Noncommercial License 1.0.0  See [LICENSE](LICENSE).
 
