@@ -2534,7 +2534,7 @@ function askWrite() {
 function buildModelSelect() {
   const s = $('model'); s.innerHTML = '';
   s.appendChild(new Option('Select your radio…', '', true, true)); s.options[0].disabled = true;
-  const groups = [['Bluetooth or USB cable', PROFILES.filter(p => p.ble)], ['USB cable', PROFILES.filter(p => !p.ble)]];
+  const groups = [['Bluetooth or USB cable', PROFILES.filter(p => p.ble)], ['USB cable or BL Programmer', PROFILES.filter(p => !p.ble && adapterOk(p))], ['USB cable only', PROFILES.filter(p => !p.ble && !adapterOk(p))]].filter(g => g[1].length);
   for (const [name, list] of groups) {
     const og = document.createElement('optgroup'); og.label = name;
     for (const p of list) og.appendChild(new Option(`Baofeng ${fullName(p)}${p.tested ? '' : ' (experimental)'}`, p.id));
