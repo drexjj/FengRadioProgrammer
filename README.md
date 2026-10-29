@@ -1,6 +1,6 @@
 # Baofeng Web-Based Programmer
 
-**Program Baofeng radios from the browser.** Bluetooth for the UV-5R Mini and other Bluetooth models, a USB cable for the rest. Nothing to install.
+**Program Baofeng radios from the browser.** Bluetooth for the UV-5R Mini and other Bluetooth models, and a USB cable or a TIDRADIO BL-1/BL-2 wireless programmer for the rest. Nothing to install.
 
 **▶ Open it: [drexjj.github.io/FengRadioProgrammer](https://drexjj.github.io/FengRadioProgrammer/)**
 
@@ -31,7 +31,7 @@ Pair the radio, read it, edit everything in a CHIRP-style grid, and write it bac
 
 ### Radios
 
-Pick your radio from the **Radio model** list before connecting. The page starts with no model chosen; opening a CHIRP `.img` file picks the right model for you.
+Pick your radio from the **Radio model** list before connecting. The page starts with no model chosen; opening a CHIRP `.img` file picks the right model for you, including older images without CHIRP's model tag (it checks the firmware or radio ID stored in the image, as CHIRP does).
 
 | Radio | Connection | Status |
 |---|---|---|
@@ -46,20 +46,38 @@ Pick your radio from the **Radio model** list before connecting. The page starts
 | UV-17Pro, UV-17Pro GPS, UV-17R Plus | USB cable | Experimental |
 | UV-25 / UV-25 Pro, UV-32 / UV-32 Pro | USB cable | Experimental |
 | UV-21Pro V2, UV-21Pro GPS | USB cable | Experimental |
-| 5RM, K6, BF-F8HP Pro | USB cable | Experimental |
-| UV-5G Plus | USB cable | Experimental |
-| UV-9R Pro (CHIRP's BF-A58, also RH5X) | USB cable, 9600 baud | Experimental |
+| 5RM, K6, BF-F8HP Pro (also K5-Plus, MaxTalker P15, MaxTalker MT-5RM) | USB cable | Experimental |
+| UV-5G Plus, GM-5RH | USB cable | Experimental |
+| UV-9R Pro, UV-9R (CHIRP's BF-A58, also RH5X) | USB cable, 9600 baud | Experimental |
+| UV-5G Pro | USB cable, 9600 baud | Experimental. Includes AM airband receive (108–136 MHz) |
+| F-11 | USB cable, 9600 baud | Experimental |
+| Radioddity UV-5RX3 | USB cable, 9600 baud | Experimental. Tri-band |
+| Radioddity UV-82X3 | USB cable, 9600 baud | Experimental. Tri-band |
+| Radioddity GT-5R | USB cable, 9600 baud | Experimental. Transmits only on 144–148 and 420–450 MHz; channels outside those bands are saved as receive-only |
+| UV-9G | USB cable, 9600 baud | Experimental |
+| BF-A58S, UV-82III | USB cable, 9600 baud | Experimental. Tri-band |
+| UV-S9X3 | USB cable, 9600 baud | Experimental. Tri-band |
+| 5RX | USB cable, 9600 baud | Experimental. Tri-band |
+| UV-82WP | USB cable, 9600 baud | Experimental |
+| GT-3WP | USB cable, 9600 baud | Experimental |
+| UV-6R | USB cable, 9600 baud | Experimental |
 | DM-32UV / DM-32 (DMR) | USB cable | Experimental. See the note below |
 
 **Experimental** means the model's memory layout, settings and clone protocol come straight from CHIRP's driver and are checked byte for byte against CHIRP, but nobody has tested this programmer on that radio yet. Read first, save a backup `.img`, and please report how it went in a [GitHub issue](https://github.com/drexjj/FengRadioProgrammer/issues).
 
 As a safety check, the programmer refuses to write when the connected radio identifies as a different model from the one selected (for example a UV-5R Mini while UV-32 is selected), or when it isn't the radio you read.
 
+### TIDRADIO BL-1 / BL-2 wireless programmer
+
+Radios without built-in Bluetooth can be programmed wirelessly with a TIDRADIO BL-1 or BL-2 plugged into the mic/speaker jack. Pick your radio, turn it on with the volume up, and click **BL-1/BL-2 adapter** (it shows up as `TIDRADIO KIT` in the pairing window). The adapter sets the serial speed itself; the programmer shows the rate it chose in the status bar.
+
+It's offered for every cable-programmed model on this page except the DM-32UV: the UV-5R family (UV-5R, UV-5R8W, UV-5X, Tenway UV-5R Pro, RT5R, A-5R and others), UV-82 / UV-82 Pro, BF-F8HP, UV-82HP, UV-5G Pro, F-11, UV-5RX3, UV-82X3, GT-5R, UV-9R Pro / UV-9R, UV-9G, BF-A58S / UV-82III, UV-S9X3, 5RX, UV-82WP, GT-3WP, UV-6R, and the UV-17Pro family cable models (UV-17Pro, UV-17Pro GPS, UV-17R Plus, UV-25, UV-32, UV-21Pro, 5RM, UV-5RM Plus / AR-5RM, UV-5RH, K6, BF-F8HP Pro, K5-Plus, MaxTalker P15 / MT-5RM, UV-5G Plus, GM-5RH). TIDRADIO lists the UV-5R, UV-82, UV-5RM, UV-17Pro GPS, UV-25 and UV-9R Pro among the adapter's supported radios. Adapter support is new: please report results in a GitHub issue.
+
 The USB models need a Baofeng programming cable (the two-pin K-plug type). On Windows, install the cable's driver first (usually CH340 or Prolific).
 
 **DM-32UV:** you can edit analog and DMR channels (mode, color code, time slot, TX contact, RX group list, radio ID, scan list, squelch) and the radio's settings. Contacts, RX group lists, radio IDs, zones and scan lists are kept as they are on the radio; edit those in the Baofeng software or CHIRP for now. Deleting a channel also removes it from zones and scan lists, as CHIRP does, and moving channels is turned off because zones and scan lists refer to channel numbers. Writing only sends the 4 KB flash pages that changed and reads each one back to check it. A radio with a programming password is refused. Some CH340 cables corrupt data from this radio; an FTDI or CP2102 cable is recommended.
 
-Not supported yet: BF-5RH Pro (CHIRP has no finished driver for it), UV-6R, UV-19 BT and GMRS-only models such as GM-30.
+Not supported yet: BF-5RH Pro (CHIRP has no finished driver for it), UV-19 BT and GMRS-only models such as GM-30.
 
 ### Browsers
 
@@ -94,7 +112,7 @@ The USB cable option uses Web Serial on desktop. On Android, the app uses the We
 
 ## How it works
 
-The radio's Bluetooth module is a serial bridge (characteristic `FFE1`), so Bluetooth and the USB cable carry the same clone protocol. The programmer has four protocol engines:
+The radio's Bluetooth module is a serial bridge (characteristic `FFE1`), so Bluetooth and the USB cable carry the same clone protocol. The TIDRADIO BL-1/BL-2 is the same idea on the mic/speaker jack: service `FF00`, data out on `FF02` and back on `FF01`, and an `AT` command channel (`FF22`/`FF21`) that reports the adapter's name and the baud rate it settled on. The programmer has four protocol engines:
 
 - **UV-17Pro family** (UV-5R Mini, UV-17Pro, UV-25, UV-32, K6 and others), ported from CHIRP's `baofeng_uv17Pro.py`: a 16-character handshake such as `PROGRAMCOLORPROU`, 64-byte block reads, 64- or 128-byte block writes, and XOR data encryption, at 115200 baud.
 - **Classic UV-5R family** (UV-5R, BF-F8HP, UV-82), ported from CHIRP's `uv5r.py`: a 7-byte magic handshake sent byte by byte, `S`/`X` block commands at 9600 baud, and CHIRP's firmware and aux-memory checks before writing.
